@@ -1,0 +1,5 @@
+reactpy[fastapi]
+pdftotext
+importlib-metadata<3.4.0
+spacy
+beautifulsoup4
