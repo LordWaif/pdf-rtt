@@ -1,7 +1,12 @@
-from utils import _remountLine,merge_dicts
+from _utils import _remountLine,merge_dicts
 from similarity_functions import spacy_cossine_similarity
+import bs4
+from typing import Tuple
+from tqdm import tqdm
 
-def find_header(pdf,n=10):
+def find_header(
+        pdf:bs4.BeautifulSoup,
+        n=10) -> Tuple[list,list]:
     '''
     Find the header of a pdf using pdftotext.
 
@@ -21,32 +26,46 @@ def find_header(pdf,n=10):
     output.extend(header)
     return _remountLine(output)
 
-def removeHeader(groups):
+def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,pageMap=None,slice_window=3):
     """
     Removes headers from a list of groups.
 
     Args:
         groups (list): A list of groups, where each group is a list of pages.
+        min_chain (int, optional): The minimum number of consecutive lines that must have similar headers to be considered a header. Defaults to 3.
+        n_lines (int, optional): The number of lines to consider when comparing headers. Defaults to 10.
+        cross_similarities_header (bool, optional): Whether to consider cross similarities between headers. Defaults to False.
 
     Returns:
         list: A list of line numbers to exclude, representing the lines that contain headers.
     """
-    headers = [find_header(page) for group in groups for page in group]
+    headers = [find_header(page,n=n_lines) for group in groups for page in group]
     similarities = dict()
+    bar = tqdm(total=len(headers),desc='Removing headers')
     for _i, header in enumerate(headers):
+        # print(f'Page {_i+1} of {len(headers)}')
         if _i < len(headers) - 1:
-            similarity = spacy_cossine_similarity(headers[_i], headers[_i+1],header=True)
-            # print(similarity)
+            similarity = spacy_cossine_similarity(headers[_i], headers[_i+1],header=True,cross_similarities_header=cross_similarities_header,slice_window=slice_window)
+            # print(headers[_i], headers[_i+1])
             for key, value in similarity.items():
                 lines = key.split('-')
                 if key not in similarities:
                     similarities[key] = [value]
                 else:
                     similarities[key].append(value)
+        bar.update(1)
+    bar.close()
     similarities = merge_dicts(similarities)
     toExclude = []
+
+    if len(headers) <= min_chain:
+        min_chain = float('-inf')
+        # min_chain = int(len(headers)*0.75)
+
     for key, value in similarities.items():
         lines = key.split('-')
+        if len(lines) <= min_chain:
+            continue
         if sum(value)/len(value) > 0.9:
             toExclude.extend(list(map(int, lines)))
     return toExclude

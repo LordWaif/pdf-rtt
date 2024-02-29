@@ -2,25 +2,42 @@ import bs4
 import subprocess
 
 
-def generateGroups(path):
+def generateGroups(path, pages):
     """
     Generate groups and soup object from a PDF file.
 
-    Args:
+    ## Args:
         path (str): The path to the PDF file.
+        pages (tuple): A tuple containing the start and end page numbers to extract. If None, all pages will be extracted.
 
-    Returns:
-        tuple: A tuple containing the groups and soup object.
+    ## Returns:
+        tuple: A tuple containing the groups, soup object, and page map.
             - groups (list): A list of groups.
             - soup (BeautifulSoup): The soup object generated from the PDF HTML.
+            - page_map (dict): A dictionary mapping page numbers to line numbers.
+
+    ## Raises:
+        subprocess.CalledProcessError: If the pdftotext command fails.
+
     """
-    cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
+    if pages is not None:
+        cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0]), '-l', str(pages[1])]
+    else:
+        cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
     pdf_html = subprocess.check_output(cmd).decode('utf-8')
     soup = bs4.BeautifulSoup(pdf_html, 'html.parser')
-    for _i,ln in enumerate(soup.find_all('line')):
-        ln['number'] = _i
+    _n = 0
+    page_map = {}
+    for _i, pg in enumerate(soup.find_all('page')):
+        for _j, ln in enumerate(pg.find_all('line')):
+            ln['number'] = _n
+            if page_map.get(_i) is None:
+                page_map[_i] = [_n]
+            else:
+                page_map[_i].append(_n)
+            _n += 1
     groups = group_pages_by_size(soup.find_all('page'))
-    return groups, soup
+    return groups, soup, page_map
 
 
 def group_pages_by_size(pages, threshold=2):
@@ -34,7 +51,7 @@ def group_pages_by_size(pages, threshold=2):
         list: A list of groups, where each group is a list of page objects with similar sizes.
     '''
     groups = []
-    for page in pages:
+    for ind,page in enumerate(pages):
         if len(groups) == 0:
             groups.append([page])
         else:
@@ -59,8 +76,30 @@ def _remountLine(lines):
     _pgN,_lines = [],[]
     for i, line in enumerate(lines):
         _pgN.append(int(line.get('number')))
-        _lines.append(' '.join([_.text for _ in line.find_all('word')]))
+        content = ' '.join([_.text for _ in line.find_all('word')])
+        _lines.append(content)
     return _pgN, _lines
+
+def _remountLinesWithCoord(lines):
+    '''Remounts a line to be used in the cosine similarity function.
+    
+    Args:
+        lines (list): A list of lines containing dictionaries with 'number' and 'bbox' keys.
+        
+    Returns:
+        tuple: A tuple containing two lists. The first list contains the 'number' values from the input lines,
+               and the second list contains the 'bbox' values from the input lines.
+    '''
+    _pgN,_lines,_coord = [],[],[]
+    for i, line in enumerate(lines):
+        _pgN.append(int(line.get('number')))
+        content = ' '.join([_.text for _ in line.find_all('word')])
+        _lines.append(content)
+        _coord.append({'xmin':float(line.get('xmin')),
+                       'ymin':float(line.get('ymin')),
+                       'xmax':float(line.get('xmax')),
+                       'ymax':float(line.get('ymax'))})
+    return _pgN, _lines, _coord
 
 def merge_dicts(original_dict):
     '''Merges the keys of a dictionary that are consecutive.

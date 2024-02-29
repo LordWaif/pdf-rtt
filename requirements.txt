@@ -1,5 +1,5 @@
-reactpy[fastapi]
-pdftotext
+pdftotext==2.2.2
 importlib-metadata<3.4.0
-spacy
-beautifulsoup4
+spacy==3.7.4
+beautifulsoup4==4.12.3
+camelot-py==0.11.0
