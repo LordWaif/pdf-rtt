@@ -21,10 +21,8 @@ def _mark_bbox(pdf, boxers, output_pdf,pages,color=(1,0,0)):
     _c = 0
     for i, page in enumerate(reader.pages):
         if pages != None and (i+1 < pages[0] or i+1 > pages[1]):
-            # writer.add_page(page)
             continue
         if len(boxers) == 0:
-            # writer.add_page(page)
             continue
         box = boxers[_c]
         _c += 1
@@ -36,7 +34,6 @@ def _mark_bbox(pdf, boxers, output_pdf,pages,color=(1,0,0)):
             # Set color of the bbox
             can.setStrokeColorRGB(*color)
             can.setLineWidth(2)
-            # print(x, y, width, height)
             can.rect(x, y, width, height)
         can.showPage()
         can.save()
@@ -94,7 +91,6 @@ def coords_to_line(file_html, coords_tables):
         coords_page = []
         tables = coords_tables[_p]
         for _t,table in enumerate(tables):
-            # print(f'Page {_p+1}/{len(file_html.find_all("page"))} - Table {_t+1}/{len(tables)}\n')
             ((x,y),w,h),_ = table
             for _l,_line in enumerate(_page.find_all('line')):
                 number = int(_line.get('number'))

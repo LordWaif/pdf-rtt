@@ -147,13 +147,17 @@ def exclude_lines(pdf, toExclude):
     return pdf
 
 def isUncopyable(soup_pdf):
+    """
+    Checks if the given soup_pdf is uncopyable.
+
+    Parameters:
+    soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+    bool: True if the PDF is uncopyable, False otherwise.
+    """
     words = soup_pdf.find_all('word')
     chars = set([word.text for word in words])
     total = len(chars)
     count = sum([1 for char in chars if char.find('%') != -1 or char.find('<') != -1 or char.find('&') != -1 or char.find('/') != -1])
     return (count/total) > 0.2
-
-# if __name__ == '__main__':
-#     path = '.pdf_files/154051_5482014.pdf'
-#     groups, soup, page_map = generateGroups(path, (0, 10))
-#     print(isUncopyable(soup))

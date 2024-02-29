@@ -101,20 +101,6 @@ def mark_bbox(pdf_html, toExclude, file, out,pages=None,color=(1,0,0)):
     coords = find_coords(pdf_html, toExclude)
     _mark_bbox(file, coords, out,pages=pages,color=color)
 
-# Deprecated
-# def removeTable(pdf_html):
-#     """
-#     Removes tables from a PDF HTML.
-
-#     Args:
-#         pdf_html (BeautifulSoup): The PDF HTML content.
-
-#     Returns:
-#         list: A list of tables identified in the PDF HTML.
-#     """
-#     lines = _remountLinesWithCoord(pdf_html.find_all('line'))
-#     from extract_tables import indentify_tables
-#     return indentify_tables(lines)
 
 def removeTableCamelot(file, file_html, pages):
     """
@@ -129,40 +115,6 @@ def removeTableCamelot(file, file_html, pages):
         list: A list of tables extracted from the PDF file.
     """
     return find_tablesCamelot(file, file_html, pages)
-
-
-# Deprecated 
-# def removeTableYolo(file,file_html):
-#     import sys
-#     sys.path.append('Parsing-PDFs-using-YOLOV3')
-#     from predict_table import detect_tables
-#     os.chdir('Parsing-PDFs-using-YOLOV3')
-#     coord_pages = []
-#     pages = file_html.find_all('page')
-#     bar = tqdm(total=len(pages),desc='Removing tables Yolo')
-#     for _i,_page in enumerate(pages):
-#         table_coords,shape = detect_tables(file,_i+1)
-#         coords = []
-#         for table_coord in table_coords:
-#             (x1,y1,x2,y2,_,_) = table_coord
-#             height_img,width_img,_ = shape
-#             page_heigth = float(_page.get('height'))
-#             page_width = float(_page.get('width'))
-#             proportion_height = page_heigth/height_img
-#             proportion_width = page_width/width_img
-#             x1 = x1*proportion_width
-#             x2 = x2*proportion_width
-#             y1 = y1*proportion_height
-#             y2 = y2*proportion_height
-#             width = x2-x1
-#             height = y2-y1
-#             coord = (((x1,y1),width,height),page_heigth)
-#             coords.append(coord)
-#         coord_pages.append(coords)
-#         bar.update(1)
-#     bar.close()
-#     os.chdir('..')
-#     return coord_pages
 
 def preprocess_pdf(
         file:str,
