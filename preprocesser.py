@@ -1,4 +1,4 @@
-from _utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord
+from utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord,isUncopyable
 from header_detection import removeHeader
 from footer_detection import removeFooter
 from mark_functions import _mark_bbox,find_coords,coords_to_line
@@ -195,6 +195,9 @@ def preprocess_pdf(
             Otherwise, returns None.
     """
     groups,soup_pdf,page_mapping = generateGroups(file,pages=pages)
+    if isUncopyable(soup_pdf):
+        print(f'File {file} is uncopyable')
+        return None
     toExcludeHeaderAndFooter = removeHeaderAndFooter(groups,page_mapping,**kwargs)
     if isBbox:
         if not out_file_bbox:
@@ -214,48 +217,3 @@ def preprocess_pdf(
         return _remountLine(soup_pdf.find_all('line'))[1]
     return None
     
-
-
-if __name__ == '__main__': 
-    import pathlib
-    from tqdm import tqdm
-    files = list(pathlib.Path('./.pdf_files').glob('*.pdf'))
-    bar = tqdm(total=len(files),desc='Processing')
-    for file in files:
-        # 910809_242009_1693489355393.204 - paisagem
-        # 154051_5482014 - incompiavel
-        # 974004_422016 926132_572013 - implementar slice de janela
-        # 910813_22015 - analisar
-        # 910809_1142016_1693490555082.2153 - analisar
-        # 771300_122019_1693489253835.2954 - problema de min_chain e cross_similarities
-        # ARQ-00470127000174-2023-1 ARQ-00470127000174-2023-5 158401_32019_1693489798054.3613 - tabela
-        # 10001_1422018 154051_5482014 153010_1432013 ?????/
-        # toAnalisys = [
-        #               '771300_122019_1693489253835.2954',
-        #               ]
-        toAnalisys = ['ARQ-00470127000174-2023-1']
-        if file.stem not in toAnalisys:
-            bar.update(1)
-            continue
-        out = file.parent.absolute().parent /pathlib.Path('bbox') / pathlib.Path(file.stem+'_bbox.pdf')
-        html = file.parent.absolute().parent /pathlib.Path('html') / pathlib.Path(file.stem+'_html.html')
-        txt = file.parent.absolute().parent /pathlib.Path('txt') / pathlib.Path(file.stem+'_txt.txt')
-        pages = [1,2]
-        preprocess_pdf(
-            file,
-            isBbox=True,  
-            out_file_bbox=out, 
-            out_path_html=html, 
-            out_path_txt=txt, 
-            pages=pages, 
-            min_chain=5, 
-            max_lines_header=10, 
-            max_lines_footer=10, 
-            cross_similarities_header=False, 
-            cross_similarities_footer=True, 
-            verbose=True, 
-            slice_window=3
-        )
-        bar.update(1)
-    bar.close()
-            

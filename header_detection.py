@@ -1,4 +1,4 @@
-from _utils import _remountLine,merge_dicts
+from utils import _remountLine,merge_dicts
 from similarity_functions import spacy_cossine_similarity
 import bs4
 from typing import Tuple

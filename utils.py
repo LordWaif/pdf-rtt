@@ -145,3 +145,15 @@ def exclude_lines(pdf, toExclude):
             if int(line.get('number')) in toExclude:
                 line.decompose()
     return pdf
+
+def isUncopyable(soup_pdf):
+    words = soup_pdf.find_all('word')
+    chars = set([word.text for word in words])
+    total = len(chars)
+    count = sum([1 for char in chars if char.find('%') != -1 or char.find('<') != -1 or char.find('&') != -1 or char.find('/') != -1])
+    return (count/total) > 0.2
+
+# if __name__ == '__main__':
+#     path = '.pdf_files/154051_5482014.pdf'
+#     groups, soup, page_map = generateGroups(path, (0, 10))
+#     print(isUncopyable(soup))
