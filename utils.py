@@ -161,3 +161,47 @@ def isUncopyable(soup_pdf):
     total = len(chars)
     count = sum([1 for char in chars if char.find('%') != -1 or char.find('<') != -1 or char.find('&') != -1 or char.find('/') != -1])
     return (count/total) > 0.2
+
+def merge_split_words(soup_pdf):
+    for __i,_line in enumerate(soup_pdf.find_all('line')):
+        _words = list(_line.find_all('word'))
+        _i = 0
+        word = ''
+        attrs = {}
+        _initial_indice = float('-inf')
+        isInside = False
+        while _i < len(_words):
+            if _i+1 == len(_words):
+                strin_prox = _words[_i-1].string
+                xmin_prox = float(_words[_i-1].get('xmin'))
+            else:
+                string_prox = _words[_i+1].string
+                xmin_prox = float(_words[_i+1].get('xmin'))
+            xmax_act = float(_words[_i].get('xmax'))
+            if abs(xmin_prox-xmax_act)< 1.5:
+                if not isInside:
+                    _initial_indice = _i
+                    attrs = _words[_i].attrs
+                    word = _words[_i].string + string_prox
+                    isInside = True
+                else:
+                    attrs['xmax'] = _words[_i+1].get('xmax')
+                    word += string_prox
+            else:
+                if word != '':
+                    _words[_initial_indice].string = word
+                    _words[_initial_indice].attrs = attrs
+                    for _ in range(_initial_indice+1,_i+1):
+                        _words[_].decompose()
+                attrs = {}
+                _initial_indice = float('-inf')
+                isInside = False
+                word = ''
+
+            _i += 1
+    return soup_pdf
+
+def isPDFImage(soup_pdf):
+    if len(_remountLine(soup_pdf.find_all('line'))[1])<3:
+        return True
+    return False

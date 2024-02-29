@@ -1,4 +1,4 @@
-from utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord,isUncopyable
+from utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord,isUncopyable,merge_split_words
 from header_detection import removeHeader
 from footer_detection import removeFooter
 from mark_functions import _mark_bbox,find_coords,coords_to_line
@@ -147,9 +147,14 @@ def preprocess_pdf(
             Otherwise, returns None.
     """
     groups,soup_pdf,page_mapping = generateGroups(file,pages=pages)
+    toExclude = []
+    from utils import isPDFImage
+    if isPDFImage(soup_pdf):
+        print(f'File {file} is a PDF image')
+        return False,'PDFImage'
     if isUncopyable(soup_pdf):
         print(f'File {file} is uncopyable')
-        return None
+        return False,'Uncopyable'
     toExcludeHeaderAndFooter = removeHeaderAndFooter(groups,page_mapping,**kwargs)
     if isBbox:
         if not out_file_bbox:
@@ -160,12 +165,58 @@ def preprocess_pdf(
     if isBbox:
         _mark_bbox(out_file_bbox.__str__(), coord_tables_camelot, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
         _mark_bbox(out_file_bbox.__str__(), coords_inside_tables, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
-    soup_pdf = exclude_lines(soup_pdf, toExcludeHeaderAndFooter+toExcludeLinesTables)
+    toExclude = toExcludeHeaderAndFooter+toExcludeLinesTables
+    soup_pdf = exclude_lines(soup_pdf, toExclude)
+    soup_pdf = merge_split_words(soup_pdf)
     if out_path_html:
         save_html(out_path_html,soup_pdf)
     if out_path_txt:
         save_txt(out_path_txt,soup_pdf)
     if out_path_html is None and out_path_txt is None:
         return _remountLine(soup_pdf.find_all('line'))[1]
-    return None
+    return True,'sucess'
+
+if __name__ == '__main__': 
+    import pathlib
+    from tqdm import tqdm
+    files = list(pathlib.Path('./.pdf_files').glob('*.pdf'))
+    bar = tqdm(total=len(files),desc='Processing')
+    errosFiles = {'Uncopyable':[],'PDFImage':[]}
+    # Create the directories to save the files
+    if not (file.parent.absolute().parent /pathlib.Path('bbox')).exists():
+        (file.parent.absolute().parent /pathlib.Path('bbox')).mkdir()
+    if not (file.parent.absolute().parent /pathlib.Path('html')).exists():
+        (file.parent.absolute().parent /pathlib.Path('html')).mkdir()
+    if not (file.parent.absolute().parent /pathlib.Path('txt')).exists():
+        (file.parent.absolute().parent /pathlib.Path('txt')).mkdir()
+    # Preprocess the files
+    for file in files:
+        # Define the output paths
+        out = file.parent.absolute().parent /pathlib.Path('bbox') / pathlib.Path(file.stem+'_bbox.pdf')
+        html = file.parent.absolute().parent /pathlib.Path('html') / pathlib.Path(file.stem+'_html.html')
+        txt = file.parent.absolute().parent /pathlib.Path('txt') / pathlib.Path(file.stem+'_txt.txt')
+        # Preprocess the file
+        pages = None
+        ret = preprocess_pdf(
+            file,
+            isBbox=True,  
+            out_file_bbox=out, 
+            out_path_html=html, 
+            out_path_txt=txt, 
+            pages=pages, 
+            min_chain=5, 
+            max_lines_header=10, 
+            max_lines_footer=10, 
+            cross_similarities_header=False, 
+            cross_similarities_footer=True, 
+            verbose=True, 
+            slice_window=3
+        )
+        # Save the errors
+        if ret[0] == False:
+            errosFiles[ret[1]].append(file.__str__())
+        with open('erros.json','w') as f:
+            json.dump(errosFiles,f)
+        bar.update(1)
+    bar.close()
     

@@ -15,7 +15,7 @@ def find_tablesCamelot(file,file_html,pages):
     bar = tqdm(total=len(tables),desc='Finding tables camelot')
     for _i,table in enumerate(tables):
         founded_in_page = table.parsing_report['page']
-        if int(founded_in_page) > pages[1] or int(founded_in_page) < pages[0]:
+        if pages != None and (int(founded_in_page) > pages[1] or int(founded_in_page) < pages[0]):
             bar.update(1)
             continue
         actual_dimensions = really_dimensions[founded_in_page-1]
