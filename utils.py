@@ -179,6 +179,7 @@ def merge_split_words(soup_pdf):
                     string_prox = _words[_i+1].string
                     xmin_prox = float(_words[_i+1].get('xmin'))
             except:
+                _i += 1
                 continue
             xmax_act = float(_words[_i].get('xmax'))
             if abs(xmin_prox-xmax_act)< 1.5:
@@ -209,4 +210,21 @@ def isPDFImage(soup_pdf):
         return True
     return False
 def find_borders(soup_pdf):
-    ...
+    """
+    Find the borders of a PDF.
+
+    Args:
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+        tuple: A tuple containing the x and y coordinates of the PDF's borders.
+    """
+    lines = soup_pdf.find_all('line')
+    x_coords = []
+    y_coords = []
+    for line in lines:
+        x_coords.append(float(line.get('xmin')))
+        x_coords.append(float(line.get('xmax')))
+        y_coords.append(float(line.get('ymin')))
+        y_coords.append(float(line.get('ymax')))
+    return (min(x_coords), min(y_coords)), (max(x_coords), max(y_coords))
