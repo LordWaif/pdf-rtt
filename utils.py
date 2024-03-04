@@ -171,12 +171,15 @@ def merge_split_words(soup_pdf):
         _initial_indice = float('-inf')
         isInside = False
         while _i < len(_words):
-            if _i+1 == len(_words):
-                strin_prox = _words[_i-1].string
-                xmin_prox = float(_words[_i-1].get('xmin'))
-            else:
-                string_prox = _words[_i+1].string
-                xmin_prox = float(_words[_i+1].get('xmin'))
+            try:
+                if _i+1 == len(_words):
+                    string_prox = _words[_i-1].string
+                    xmin_prox = float(_words[_i-1].get('xmin'))
+                else:
+                    string_prox = _words[_i+1].string
+                    xmin_prox = float(_words[_i+1].get('xmin'))
+            except:
+                continue
             xmax_act = float(_words[_i].get('xmax'))
             if abs(xmin_prox-xmax_act)< 1.5:
                 if not isInside:
@@ -205,3 +208,5 @@ def isPDFImage(soup_pdf):
     if len(_remountLine(soup_pdf.find_all('line'))[1])<3:
         return True
     return False
+def find_borders(soup_pdf):
+    ...
