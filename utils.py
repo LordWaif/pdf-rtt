@@ -228,3 +228,54 @@ def find_borders(soup_pdf):
         y_coords.append(float(line.get('ymin')))
         y_coords.append(float(line.get('ymax')))
     return (min(x_coords), min(y_coords)), (max(x_coords), max(y_coords))
+
+from PyPDF2 import PdfWriter, PdfReader
+import tempfile
+def extract_rectangle_from_pdf(input_pdf_path, coordinates):
+    # Create a temporary file
+    temp_file = tempfile.NamedTemporaryFile(delete=False,suffix='.pdf')
+    # Create a PDF writer object
+    writer = PdfWriter()
+
+    # Read the input PDF
+    reader = PdfReader(input_pdf_path)
+
+    # Get the number of pages in the input PDF
+    num_pages = len(reader.pages)
+
+    # Loop over all the pages
+    for page_number in range(num_pages):
+        # Get the page
+        page = reader.pages[page_number]
+        
+        # Set the crop box coordinates
+        page.cropbox.upper_left = coordinates[0]
+        page.cropbox.lower_right = coordinates[1]
+
+        # Add the page to the writer object
+        writer.add_page(page)
+
+    # Write the output PDF
+    with open(temp_file.name, 'wb') as output_pdf:
+        writer.write(output_pdf)
+
+    return temp_file.name
+
+def isPDFCollumn(soup_pdf):
+    """
+    Checks if the given soup_pdf is a PDF with columns.
+
+    Parameters:
+    soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+    bool: True if the PDF has columns, False otherwise.
+    """
+    lines = soup_pdf.find_all('line')
+    x_coords = []
+    for line in lines:
+        x_coords.append(float(line.get('xmin')))
+    x_coords = list(set(x_coords))
+    x_coords.sort()
+    return len(x_coords) > 1
+

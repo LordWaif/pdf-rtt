@@ -1,6 +1,6 @@
 from utils import _remountLine,merge_dicts
 from similarity_functions import spacy_cossine_similarity
-import bs4
+import bs4,time
 from typing import Tuple
 from tqdm import tqdm
 
@@ -26,7 +26,7 @@ def find_header(
     output.extend(header)
     return _remountLine(output)
 
-def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,pageMap=None,slice_window=3):
+def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,pageMap=None,slice_window=3,reach=1):
     """
     Removes headers from a list of groups.
 
@@ -42,10 +42,14 @@ def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,p
     headers = [find_header(page,n=n_lines) for group in groups for page in group]
     similarities = dict()
     bar = tqdm(total=len(headers),desc='Removing headers')
+    timePerPage = 0
+    start = time.time()
     for _i, header in enumerate(headers):
         # print(f'Page {_i+1} of {len(headers)}')
-        if _i < len(headers) - 1:
-            similarity = spacy_cossine_similarity(headers[_i], headers[_i+1],header=True,cross_similarities_header=cross_similarities_header,slice_window=slice_window)
+        for _j in range(reach):
+            if _i+_j+1 >= len(headers):
+                break
+            similarity = spacy_cossine_similarity(headers[_i], headers[_i+_j+1],header=True,cross_similarities_header=cross_similarities_header,slice_window=slice_window)
             # print(headers[_i], headers[_i+1])
             for key, value in similarity.items():
                 lines = key.split('-')
@@ -54,7 +58,11 @@ def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,p
                 else:
                     similarities[key].append(value)
         bar.update(1)
+    end = time.time()
+    bar.clear()
     bar.close()
+    timePerPage = end-start
+    print(f'(Header) Average time per page: {timePerPage/len(headers)}')
     similarities = merge_dicts(similarities)
     toExclude = []
 

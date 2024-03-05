@@ -3,7 +3,7 @@ from header_detection import removeHeader
 from footer_detection import removeFooter
 from mark_functions import _mark_bbox,find_coords,coords_to_line
 from extract_tables import find_tablesCamelot
-import warnings
+import warnings,time
 
 def removeHeaderAndFooter(
         groups, 
@@ -14,7 +14,10 @@ def removeHeaderAndFooter(
         cross_similarities_header=False, 
         cross_similarities_footer=False,
         verbose=True,
-        slice_window=3
+        slice_window=3,
+        header=True,
+        footer=True,
+        reach = 1
         ):
     """
     Removes the header and footer from a given file.
@@ -45,17 +48,22 @@ def removeHeaderAndFooter(
         warnings.warn('This may take a while...',ResourceWarning)  
         warnings.warn('To disable this warning, set verbose to False.')
         warnings.simplefilter('ignore', ResourceWarning)
-    toExclude_Header = removeHeader(groups, 
-                                    min_chain=min_chain, 
-                                    n_lines=max_lines_header, 
-                                    cross_similarities_header=cross_similarities_header,
-                                    pageMap=pageMapping,slice_window=slice_window)
-    toExclude_Footer = removeFooter(groups, 
-                                    min_chain=min_chain, 
-                                    n_lines=max_lines_footer, 
-                                    cross_similarities_footer=cross_similarities_footer,
-                                    pageMap=pageMapping,slice_window=slice_window)
-    return sorted(list(set(toExclude_Header + toExclude_Footer)))
+    toExclude = []
+    if header:
+        toExclude_Header = removeHeader(groups, 
+                                        min_chain=min_chain, 
+                                        n_lines=max_lines_header, 
+                                        cross_similarities_header=cross_similarities_header,
+                                        pageMap=pageMapping,slice_window=slice_window,reach=reach)
+        toExclude.extend(toExclude_Header)
+    if footer:
+        toExclude_Footer = removeFooter(groups, 
+                                        min_chain=min_chain, 
+                                        n_lines=max_lines_footer, 
+                                        cross_similarities_footer=cross_similarities_footer,
+                                        pageMap=pageMapping,slice_window=slice_window,reach=reach)
+        toExclude.extend(toExclude_Footer)
+    return sorted(list(set(toExclude)))
 
 def save_html(file, soup):
     """
@@ -102,7 +110,7 @@ def mark_bbox(pdf_html, toExclude, file, out,pages=None,color=(1,0,0)):
     _mark_bbox(file, coords, out,pages=pages,color=color)
 
 
-def removeTableCamelot(file, file_html, pages):
+def removeTableCamelot(file, file_html, pages,**kwargs):
     """
     Removes tables from a PDF file using the Camelot library.
 
@@ -114,15 +122,19 @@ def removeTableCamelot(file, file_html, pages):
     Returns:
         list: A list of tables extracted from the PDF file.
     """
-    return find_tablesCamelot(file, file_html, pages)
+    return find_tablesCamelot(file, file_html, pages,**kwargs)
 
 def preprocess_pdf(
         file:str,
         pages:list=None,
         isBbox=True,
+        header=True,
+        footer=True,
+        tables=True,
         out_file_bbox:str=None,
         out_path_html:str=None,
         out_path_txt:str=None,
+        out_path_csv:str=None,
         **kwargs
     ):
     """
@@ -147,6 +159,13 @@ def preprocess_pdf(
             Otherwise, returns None.
     """
     groups,soup_pdf,page_mapping = generateGroups(file,pages=pages)
+    len_pages = len(groups[0])
+    start = time.time()
+    # from utils import find_borders
+    # (x1,y1),(x2,y2) = find_borders(soup_pdf)
+    # print(f'File {file} has borders: {x1,y1,x2,y2}')
+    # _mark_bbox(file, [[(((x1,y1),x2-x1,y2-y1),842.00)]], out_file_bbox,pages=pages,color=(0,0,1))
+    # exit()
     toExclude = []
     from utils import isPDFImage
     if isPDFImage(soup_pdf):
@@ -155,16 +174,24 @@ def preprocess_pdf(
     if isUncopyable(soup_pdf):
         print(f'File {file} is uncopyable')
         return False,'Uncopyable'
-    toExcludeHeaderAndFooter = removeHeaderAndFooter(groups,page_mapping,**kwargs)
+    origin_file = file
+    toExcludeHeaderAndFooter = removeHeaderAndFooter(groups,page_mapping,header=header,footer=footer,**kwargs)
     if isBbox:
         if not out_file_bbox:
             out_file_bbox = file
         mark_bbox(soup_pdf,toExcludeHeaderAndFooter,file,out_file_bbox,pages=pages)
-    coord_tables_camelot = removeTableCamelot(file,soup_pdf,pages)
-    coords_inside_tables,toExcludeLinesTables = coords_to_line(soup_pdf,coord_tables_camelot)
-    if isBbox:
-        _mark_bbox(out_file_bbox.__str__(), coord_tables_camelot, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
-        _mark_bbox(out_file_bbox.__str__(), coords_inside_tables, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
+        origin_file = out_file_bbox
+    else:
+        toExcludeHeaderAndFooter = []
+
+    if tables:
+        coord_tables_camelot = removeTableCamelot(file,soup_pdf,pages,out_path_csv=out_path_csv)
+        coords_inside_tables,toExcludeLinesTables = coords_to_line(soup_pdf,coord_tables_camelot)
+        if isBbox:
+            _mark_bbox(origin_file.__str__(), coord_tables_camelot, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
+            _mark_bbox(out_file_bbox.__str__(), coords_inside_tables, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
+    else:
+        toExcludeLinesTables = []
     toExclude = toExcludeHeaderAndFooter+toExcludeLinesTables
     soup_pdf = exclude_lines(soup_pdf, toExclude)
     soup_pdf = merge_split_words(soup_pdf)
@@ -174,44 +201,61 @@ def preprocess_pdf(
         save_txt(out_path_txt,soup_pdf)
     if out_path_html is None and out_path_txt is None:
         return _remountLine(soup_pdf.find_all('line'))[1]
+    end = time.time()
+    elapsed = end-start
+    print(f'Total time per page: {elapsed/len_pages}')
     return True,'sucess'
 
 if __name__ == '__main__': 
-    import pathlib
+    import pathlib,json,time
     from tqdm import tqdm
     files = list(pathlib.Path('./.pdf_files').glob('*.pdf'))
     bar = tqdm(total=len(files),desc='Processing')
     errosFiles = {'Uncopyable':[],'PDFImage':[]}
-    # Create the directories to save the files
-    if not (file.parent.absolute().parent /pathlib.Path('bbox')).exists():
-        (file.parent.absolute().parent /pathlib.Path('bbox')).mkdir()
-    if not (file.parent.absolute().parent /pathlib.Path('html')).exists():
-        (file.parent.absolute().parent /pathlib.Path('html')).mkdir()
-    if not (file.parent.absolute().parent /pathlib.Path('txt')).exists():
-        (file.parent.absolute().parent /pathlib.Path('txt')).mkdir()
     # Preprocess the files
     for file in files:
+        list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        # list_files = ['ARQ-00470127000174-2023-1']
+        # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        if file.stem not in list_files:
+            continue
+        # Create the directories to save the files
+        if not (file.parent.absolute().parent /pathlib.Path('bbox')).exists():
+            (file.parent.absolute().parent /pathlib.Path('bbox')).mkdir()
+        if not (file.parent.absolute().parent /pathlib.Path('html')).exists():
+            (file.parent.absolute().parent /pathlib.Path('html')).mkdir()
+        if not (file.parent.absolute().parent /pathlib.Path('txt')).exists():
+            (file.parent.absolute().parent /pathlib.Path('txt')).mkdir()
         # Define the output paths
         out = file.parent.absolute().parent /pathlib.Path('bbox') / pathlib.Path(file.stem+'_bbox.pdf')
         html = file.parent.absolute().parent /pathlib.Path('html') / pathlib.Path(file.stem+'_html.html')
         txt = file.parent.absolute().parent /pathlib.Path('txt') / pathlib.Path(file.stem+'_txt.txt')
+        tables = file.parent.absolute().parent /pathlib.Path('tables')
         # Preprocess the file
         pages = None
+        start = time.time()
         ret = preprocess_pdf(
             file,
-            isBbox=True,  
+            header=True,
+            footer=True,
+            tables=True,
+            isBbox=False,  
             out_file_bbox=out, 
             out_path_html=html, 
-            out_path_txt=txt, 
+            out_path_txt=txt,
+            out_path_csv=tables, 
             pages=pages, 
             min_chain=5, 
-            max_lines_header=10, 
-            max_lines_footer=10, 
+            max_lines_header=5, 
+            max_lines_footer=5, 
             cross_similarities_header=False, 
-            cross_similarities_footer=True, 
+            cross_similarities_footer=False, 
             verbose=True, 
-            slice_window=3
+            slice_window=1,
+            reach = 2
         )
+        end = time.time()
+        print(f'File {file} took {end-start} seconds')
         # Save the errors
         if ret[0] == False:
             errosFiles[ret[1]].append(file.__str__())

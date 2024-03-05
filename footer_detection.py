@@ -1,6 +1,7 @@
 from utils import merge_dicts,_remountLine
 from similarity_functions import spacy_cossine_similarity
 from tqdm import tqdm
+import time
 
 def find_footer(pdf, n=10):
     """
@@ -22,7 +23,7 @@ def find_footer(pdf, n=10):
     output.extend(footer)
     return _remountLine(output)
 
-def removeFooter(groups, min_chain=3, n_lines=10, cross_similarities_footer=False, pageMap=None, slice_window=3):
+def removeFooter(groups, min_chain=3, n_lines=10, cross_similarities_footer=False, pageMap=None, slice_window=3,reach=1):
     """
     Removes footers from a given list of groups.
 
@@ -43,10 +44,15 @@ def removeFooter(groups, min_chain=3, n_lines=10, cross_similarities_footer=Fals
     similarities = dict()
     footers = [reverse_footer(footer) for footer in footers]
     bar = tqdm(total=len(footers), desc='Removing footers')
+    timePerPage = 0
+    start = time.time()
     for _i, footer in enumerate(footers):
         # print(f'Page {_i+1} of {len(footers)}')
-        if _i < len(footers) - 1:
-            similarity = spacy_cossine_similarity(footers[_i], footers[_i+1], footer=True, cross_similarities_footer=cross_similarities_footer,slice_window=slice_window)
+        for _j in range(reach):
+            if _i+_j+1 >= len(footers):
+                break
+            similarity = spacy_cossine_similarity(footers[_i], footers[_i+_j+1],footer=True,cross_similarities_footer=cross_similarities_footer,slice_window=slice_window)
+            # print(headers[_i], headers[_i+1])
             for key, value in similarity.items():
                 lines = key.split('-')
                 if key not in similarities:
@@ -54,8 +60,11 @@ def removeFooter(groups, min_chain=3, n_lines=10, cross_similarities_footer=Fals
                 else:
                     similarities[key].append(value)
         bar.update(1)
+    end = time.time()
+    bar.clear()
     bar.close()
-
+    timePerPage = end-start
+    print(f'(Footer) Average time per page: {timePerPage/len(footers)}')
     similarities = merge_dicts(similarities)
     toExclude = []
 

@@ -16,14 +16,19 @@ def _mark_bbox(pdf, boxers, output_pdf,pages,color=(1,0,0)):
     """
     reader = PdfReader(pdf)
     writer = PdfWriter()
+    if pages != None:
+        pages_list = reader.pages[pages[0]-1:pages[1]]
+    else:
+        pages_list = reader.pages
     # if pages is None:
     #     pages = [1,len(boxers)]
     _c = 0
-    for i, page in enumerate(reader.pages):
-        if pages != None and (i+1 < pages[0] or i+1 > pages[1]):
-            continue
+    for i, page in enumerate(pages_list):
         if len(boxers) == 0:
+            writer.add_page(page)
             continue
+        if _c >= len(boxers):
+            break
         box = boxers[_c]
         _c += 1
         packet = io.BytesIO()
