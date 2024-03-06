@@ -26,6 +26,10 @@ def generateGroups(path, pages):
         cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
     pdf_html = subprocess.check_output(cmd).decode('utf-8')
     soup = bs4.BeautifulSoup(pdf_html, 'html.parser')
+    soup = reOrder(soup)
+    # Salvar o arquivo html
+    with open('pdf.html', 'w') as f:
+        f.write(soup.prettify())
     _n = 0
     page_map = {}
     for _i, pg in enumerate(soup.find_all('page')):
@@ -279,3 +283,53 @@ def isPDFCollumn(soup_pdf):
     x_coords.sort()
     return len(x_coords) > 1
 
+def isVertical(line):
+    """
+    Check if a line is vertical.
+
+    Args:
+        line (dict): A dictionary containing the coordinates of the line.
+
+    Returns:
+        bool: True if the line is vertical, False otherwise.
+    """
+    delta_y = float(line.get('ymax')) - float(line.get('ymin'))
+    delta_x = float(line.get('xmax')) - float(line.get('xmin'))
+    return delta_y > delta_x
+
+def removeVerticalLines(soup_pdf):
+    """
+    Remove vertical lines from a PDF.
+
+    Args:
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+        BeautifulSoup: The modified soup object.
+    """
+    for _pg in soup_pdf.find_all('page'):
+        lines = _pg.find_all('line')
+        for line in lines:
+            if isVertical(line):
+                line.decompose()
+    return soup_pdf
+
+def reOrder(soup_pdf):
+    """
+    Reorder the lines in a PDF.
+
+    Args:
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+        BeautifulSoup: The reordered soup object.
+    """
+    soup_pdf = removeVerticalLines(soup_pdf)
+    for _pg in soup_pdf.find_all('page'):
+        lines = _pg.find_all('line')
+        _pg.clear()
+        lines = sorted(lines, key=lambda x: (float(x.get('ymin')), float(x.get('xmin'))))
+        for line in lines:
+            _pg.append(line)
+        # Reordernar dentro do html
+    return soup_pdf

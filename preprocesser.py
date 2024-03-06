@@ -214,9 +214,9 @@ if __name__ == '__main__':
     errosFiles = {'Uncopyable':[],'PDFImage':[]}
     # Preprocess the files
     for file in files:
-        list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        # list_files = ['927744_1982021']
         # list_files = ['ARQ-00470127000174-2023-1']
-        # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
         if file.stem not in list_files:
             continue
         # Create the directories to save the files
@@ -238,14 +238,14 @@ if __name__ == '__main__':
             file,
             header=True,
             footer=True,
-            tables=True,
-            isBbox=False,  
+            tables=False,
+            isBbox=True,  
             out_file_bbox=out, 
             out_path_html=html, 
             out_path_txt=txt,
-            out_path_csv=tables, 
+            out_path_csv=None, 
             pages=pages, 
-            min_chain=5, 
+            min_chain=2, 
             max_lines_header=5, 
             max_lines_footer=5, 
             cross_similarities_header=False, 

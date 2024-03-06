@@ -7,3 +7,4 @@ reportlab
 pypdf2
 opencv-python
 ghostscript
+pypdf2
