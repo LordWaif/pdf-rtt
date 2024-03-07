@@ -26,6 +26,8 @@ def generateGroups(path, pages):
         cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
     pdf_html = subprocess.check_output(cmd).decode('utf-8')
     soup = bs4.BeautifulSoup(pdf_html, 'html.parser')
+    from utils import isPDFCollumn
+    print(isPDFCollumn(soup))
     soup = reOrder(soup)
     # Salvar o arquivo html
     with open('pdf.html', 'w') as f:
@@ -275,13 +277,21 @@ def isPDFCollumn(soup_pdf):
     Returns:
     bool: True if the PDF has columns, False otherwise.
     """
-    lines = soup_pdf.find_all('line')
-    x_coords = []
-    for line in lines:
-        x_coords.append(float(line.get('xmin')))
-    x_coords = list(set(x_coords))
-    x_coords.sort()
-    return len(x_coords) > 1
+    for _page in soup_pdf.find_all('page'):
+        height = int(float(_page.get('height')))
+        groups = {_:[] for _ in range(0,height,15)}
+        for _line in _page.find_all('line'):
+            ...
+            y = _line.get('ymin')
+            y = int(float(y))
+            for _i,(k,v) in enumerate(groups.items()):
+                chaves = list(groups.keys())
+                if chaves[_i] <= y < chaves[_i+1]:
+                    groups[k].append(y)
+        print(len([len(_) for _ in list(groups.values()) if len(_) > 3])/len(groups))
+        print('\n\n')
+
+            
 
 def isVertical(line):
     """

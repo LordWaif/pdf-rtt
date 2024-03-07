@@ -236,8 +236,8 @@ if __name__ == '__main__':
         start = time.time()
         ret = preprocess_pdf(
             file,
-            header=True,
-            footer=True,
+            header=False,
+            footer=False,
             tables=False,
             isBbox=True,  
             out_file_bbox=out, 
