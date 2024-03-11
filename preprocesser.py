@@ -1,4 +1,5 @@
 from utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord,isUncopyable,merge_split_words
+from extract_rectangles import find_rectangles
 from header_detection import removeHeader
 from footer_detection import removeFooter
 from mark_functions import _mark_bbox,find_coords,coords_to_line
@@ -109,6 +110,17 @@ def mark_bbox(pdf_html, toExclude, file, out,pages=None,color=(1,0,0)):
     coords = find_coords(pdf_html, toExclude)
     _mark_bbox(file, coords, out,pages=pages,color=color)
 
+def removeRectangles(file):
+    """
+    Removes rectangles (gray shades) from a PDF file.
+
+    Args:
+        file (str): Path to the input PDF file.
+
+    Returns:
+        list: A list of coordinates of the rectangles found in the PDF file.
+    """
+    return find_rectangles(file)
 
 def removeTableCamelot(file, file_html, pages,**kwargs):
     """
@@ -128,6 +140,7 @@ def preprocess_pdf(
         file:str,
         pages:list=None,
         isBbox=True,
+        rectangles=True,
         header=True,
         footer=True,
         tables=True,
@@ -175,6 +188,16 @@ def preprocess_pdf(
         print(f'File {file} is uncopyable')
         return False,'Uncopyable'
     origin_file = file
+
+    if rectangles:
+        coord_rectangles = removeRectangles(file)
+        coords_inside_rectangles, toExcludeRectangles = coords_to_line(soup_pdf,coord_rectangles)
+        if isBbox:
+            _mark_bbox(file, coord_rectangles, out_file_bbox,pages=pages,color=(0,0,1))
+            _mark_bbox(out_file_bbox.__str__(), coords_inside_rectangles, out_file_bbox.__str__(),pages=pages,color=(0,1,0))
+    else:
+       toExcludeRectangles = []
+
     toExcludeHeaderAndFooter = removeHeaderAndFooter(groups,page_mapping,header=header,footer=footer,**kwargs)
     if isBbox:
         if not out_file_bbox:
@@ -186,13 +209,15 @@ def preprocess_pdf(
 
     if tables:
         coord_tables_camelot = removeTableCamelot(file,soup_pdf,pages,out_path_csv=out_path_csv)
+        #print('Tables coordinates: ', coord_tables_camelot)
         coords_inside_tables,toExcludeLinesTables = coords_to_line(soup_pdf,coord_tables_camelot)
         if isBbox:
             _mark_bbox(origin_file.__str__(), coord_tables_camelot, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
             _mark_bbox(out_file_bbox.__str__(), coords_inside_tables, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
     else:
         toExcludeLinesTables = []
-    toExclude = toExcludeHeaderAndFooter+toExcludeLinesTables
+
+    toExclude = toExcludeRectangles+toExcludeHeaderAndFooter+toExcludeLinesTables
     soup_pdf = exclude_lines(soup_pdf, toExclude)
     soup_pdf = merge_split_words(soup_pdf)
     if out_path_html:

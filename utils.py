@@ -21,7 +21,11 @@ def generateGroups(path, pages):
 
     """
     if pages is not None:
-        cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0]), '-l', str(pages[1])]
+        # If the end page is -1, extract all pages from the start page to the end of the document
+        if pages[1] == -1:
+            cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0])]
+        else:
+            cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0]), '-l', str(pages[1])]
     else:
         cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
     pdf_html = subprocess.check_output(cmd).decode('utf-8')
