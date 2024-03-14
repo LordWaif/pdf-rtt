@@ -1,8 +1,12 @@
 import bs4
 import subprocess
+from layout_functions import numerateLines,isPDFCollumn
+from PyPDF2 import PdfWriter, PdfReader
+import tempfile
 
 
-def generateGroups(path, pages):
+def generateGroups(path, pages,indentify_collumns=False):
+    from layout_functions import reOrder
     """
     Generate groups and soup object from a PDF file.
 
@@ -26,22 +30,49 @@ def generateGroups(path, pages):
         cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
     pdf_html = subprocess.check_output(cmd).decode('utf-8')
     soup = bs4.BeautifulSoup(pdf_html, 'html.parser')
-    from utils import isPDFCollumn
-    print(isPDFCollumn(soup))
-    soup = reOrder(soup)
+    if indentify_collumns:
+        isCollumn , collumns = isPDFCollumn(soup)
+    else:
+        isCollumn = False
+    # from mark_functions import _mark_bbox
+    # coords_pages = []
+    # for _p in collumns.keys():
+    #     coords_p = []
+    #     for _l in collumns[_p]:
+    #         xMin = float(_l[2]-2)
+    #         yMin = float(_l[0])
+    #         xMax = float(_l[2]+2)
+    #         yMax = float(_l[1])
+    #         width = xMax - xMin
+    #         height = yMax - yMin
+    #         coords_p.append(
+    #             (
+    #                 (
+    #                     (xMin,yMin),
+    #                     width,height
+    #                 ),
+    #                 float(soup.find('page').get('height'))
+    #             )
+    #         )
+    #     coords_pages.append(coords_p)
+    # _mark_bbox(
+    #     path,
+    #     coords_pages,
+    #     'pdf_marked.pdf',
+    #     pages
+    # )
+    if isCollumn:
+        soup = reOrder(soup,collumns)
+    else:
+        soup = reOrder(soup)
+    soup, page_map = numerateLines(soup)
+    from layout_functions import findBlocks
+    # coords_blocks = findBlocks(soup)
+    # from mark_functions import _mark_bbox
+    # _mark_bbox(path, coords_blocks, 'pdf_marked.pdf',pages)
     # Salvar o arquivo html
-    with open('pdf.html', 'w') as f:
-        f.write(soup.prettify())
-    _n = 0
-    page_map = {}
-    for _i, pg in enumerate(soup.find_all('page')):
-        for _j, ln in enumerate(pg.find_all('line')):
-            ln['number'] = _n
-            if page_map.get(_i) is None:
-                page_map[_i] = [_n]
-            else:
-                page_map[_i].append(_n)
-            _n += 1
+    # with open('pdf.html', 'w') as f:
+    #     f.write(soup.prettify())
     groups = group_pages_by_size(soup.find_all('page'))
     return groups, soup, page_map
 
@@ -179,10 +210,10 @@ def merge_split_words(soup_pdf):
         while _i < len(_words):
             try:
                 if _i+1 == len(_words):
-                    string_prox = _words[_i-1].string
+                    string_prox = _words[_i-1]
                     xmin_prox = float(_words[_i-1].get('xmin'))
                 else:
-                    string_prox = _words[_i+1].string
+                    string_prox = _words[_i+1]
                     xmin_prox = float(_words[_i+1].get('xmin'))
             except:
                 _i += 1
@@ -192,11 +223,11 @@ def merge_split_words(soup_pdf):
                 if not isInside:
                     _initial_indice = _i
                     attrs = _words[_i].attrs
-                    word = _words[_i].string + string_prox
+                    word = _words[_i].string + string_prox.string
                     isInside = True
                 else:
-                    attrs['xmax'] = _words[_i+1].get('xmax')
-                    word += string_prox
+                    attrs['xmax'] = str(max(float(_words[_i].get('xmax')),float(string_prox.get('xmax'))))
+                    word += string_prox.string
             else:
                 if word != '':
                     _words[_initial_indice].string = word
@@ -211,32 +242,6 @@ def merge_split_words(soup_pdf):
             _i += 1
     return soup_pdf
 
-def isPDFImage(soup_pdf):
-    if len(_remountLine(soup_pdf.find_all('line'))[1])<3:
-        return True
-    return False
-def find_borders(soup_pdf):
-    """
-    Find the borders of a PDF.
-
-    Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-        tuple: A tuple containing the x and y coordinates of the PDF's borders.
-    """
-    lines = soup_pdf.find_all('line')
-    x_coords = []
-    y_coords = []
-    for line in lines:
-        x_coords.append(float(line.get('xmin')))
-        x_coords.append(float(line.get('xmax')))
-        y_coords.append(float(line.get('ymin')))
-        y_coords.append(float(line.get('ymax')))
-    return (min(x_coords), min(y_coords)), (max(x_coords), max(y_coords))
-
-from PyPDF2 import PdfWriter, PdfReader
-import tempfile
 def extract_rectangle_from_pdf(input_pdf_path, coordinates):
     # Create a temporary file
     temp_file = tempfile.NamedTemporaryFile(delete=False,suffix='.pdf')
@@ -266,80 +271,3 @@ def extract_rectangle_from_pdf(input_pdf_path, coordinates):
         writer.write(output_pdf)
 
     return temp_file.name
-
-def isPDFCollumn(soup_pdf):
-    """
-    Checks if the given soup_pdf is a PDF with columns.
-
-    Parameters:
-    soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-    bool: True if the PDF has columns, False otherwise.
-    """
-    for _page in soup_pdf.find_all('page'):
-        height = int(float(_page.get('height')))
-        groups = {_:[] for _ in range(0,height,15)}
-        for _line in _page.find_all('line'):
-            ...
-            y = _line.get('ymin')
-            y = int(float(y))
-            for _i,(k,v) in enumerate(groups.items()):
-                chaves = list(groups.keys())
-                if chaves[_i] <= y < chaves[_i+1]:
-                    groups[k].append(y)
-        print(len([len(_) for _ in list(groups.values()) if len(_) > 3])/len(groups))
-        print('\n\n')
-
-            
-
-def isVertical(line):
-    """
-    Check if a line is vertical.
-
-    Args:
-        line (dict): A dictionary containing the coordinates of the line.
-
-    Returns:
-        bool: True if the line is vertical, False otherwise.
-    """
-    delta_y = float(line.get('ymax')) - float(line.get('ymin'))
-    delta_x = float(line.get('xmax')) - float(line.get('xmin'))
-    return delta_y > delta_x
-
-def removeVerticalLines(soup_pdf):
-    """
-    Remove vertical lines from a PDF.
-
-    Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-        BeautifulSoup: The modified soup object.
-    """
-    for _pg in soup_pdf.find_all('page'):
-        lines = _pg.find_all('line')
-        for line in lines:
-            if isVertical(line):
-                line.decompose()
-    return soup_pdf
-
-def reOrder(soup_pdf):
-    """
-    Reorder the lines in a PDF.
-
-    Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-        BeautifulSoup: The reordered soup object.
-    """
-    soup_pdf = removeVerticalLines(soup_pdf)
-    for _pg in soup_pdf.find_all('page'):
-        lines = _pg.find_all('line')
-        _pg.clear()
-        lines = sorted(lines, key=lambda x: (float(x.get('ymin')), float(x.get('xmin'))))
-        for line in lines:
-            _pg.append(line)
-        # Reordernar dentro do html
-    return soup_pdf

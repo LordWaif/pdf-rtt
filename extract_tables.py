@@ -2,9 +2,11 @@
 from tqdm import tqdm
 import camelot,os,time
 from pathlib import Path
+from utils import extract_rectangle_from_pdf
+from layout_functions import find_borders
+import cv2
 
 def find_tablesCamelot(file,file_html,pages,**kwargs):
-    from utils import find_borders,extract_rectangle_from_pdf
     (x1,y1),(x2,y2) = find_borders(file_html)
     temp_pdf = extract_rectangle_from_pdf(file,((x1-5,y1-5),(x2+5,y2+5)))
     # Gerar pdf a apenas com oque estiver contido dentro do retangulo
@@ -17,7 +19,6 @@ def find_tablesCamelot(file,file_html,pages,**kwargs):
     os.remove(temp_pdf)
     if len(tables) == 0:
         print('No tables found')
-
     really_dimensions = [
         {
             'width':float(page.get('width')),
@@ -70,7 +71,6 @@ def find_tablesCamelot(file,file_html,pages,**kwargs):
     print(f'(Tables) Average time per page: {(end-start)/(len(really_dimensions) if pages == None else (int(pages[1])-int(pages[0])+1))}')
     return [v for v in coords_pages.values()]
 
-import cv2
 def draw_bbox(img, start_point, end_point, ratio=1):
     start_point = tuple(map(lambda x: round(x * ratio), start_point))
     end_point = tuple(map(lambda x: round(x * ratio), end_point))

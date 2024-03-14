@@ -1,4 +1,4 @@
-from utils import merge_dicts,_remountLine,isVertical
+from utils import merge_dicts,_remountLine
 from similarity_functions import spacy_cossine_similarity
 from tqdm import tqdm
 import time,math

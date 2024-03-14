@@ -3,6 +3,7 @@ from header_detection import removeHeader
 from footer_detection import removeFooter
 from mark_functions import _mark_bbox,find_coords,coords_to_line
 from extract_tables import find_tablesCamelot
+from layout_functions import isPDFImage
 import warnings,time
 
 def removeHeaderAndFooter(
@@ -131,6 +132,7 @@ def preprocess_pdf(
         header=True,
         footer=True,
         tables=True,
+        indentify_collumns=True,
         out_file_bbox:str=None,
         out_path_html:str=None,
         out_path_txt:str=None,
@@ -158,7 +160,7 @@ def preprocess_pdf(
         str or None: If neither out_path_html nor out_path_txt is provided, returns the preprocessed PDF as a string.
             Otherwise, returns None.
     """
-    groups,soup_pdf,page_mapping = generateGroups(file,pages=pages)
+    groups,soup_pdf,page_mapping = generateGroups(file,pages=pages,indentify_collumns=indentify_collumns)
     len_pages = len(groups[0])
     start = time.time()
     # from utils import find_borders
@@ -167,7 +169,6 @@ def preprocess_pdf(
     # _mark_bbox(file, [[(((x1,y1),x2-x1,y2-y1),842.00)]], out_file_bbox,pages=pages,color=(0,0,1))
     # exit()
     toExclude = []
-    from utils import isPDFImage
     if isPDFImage(soup_pdf):
         print(f'File {file} is a PDF image')
         return False,'PDFImage'
@@ -216,7 +217,8 @@ if __name__ == '__main__':
     for file in files:
         # list_files = ['927744_1982021']
         # list_files = ['ARQ-00470127000174-2023-1']
-        list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        list_files = ['910811_572021_1693489961855.3052']
+        # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
         if file.stem not in list_files:
             continue
         # Create the directories to save the files
@@ -236,16 +238,17 @@ if __name__ == '__main__':
         start = time.time()
         ret = preprocess_pdf(
             file,
-            header=False,
-            footer=False,
-            tables=False,
+            header=True,
+            footer=True,
+            tables=True,
             isBbox=True,  
+            indentify_collumns = False,
             out_file_bbox=out, 
             out_path_html=html, 
             out_path_txt=txt,
             out_path_csv=None, 
             pages=pages, 
-            min_chain=2, 
+            min_chain=3, 
             max_lines_header=5, 
             max_lines_footer=5, 
             cross_similarities_header=False, 
