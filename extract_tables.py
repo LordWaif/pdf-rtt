@@ -5,6 +5,7 @@ from pathlib import Path
 from utils import extract_rectangle_from_pdf
 from layout_functions import find_borders
 import cv2
+import multiprocessing as mp
 
 def find_tablesCamelot(file,file_html,pages,**kwargs):
     (x1,y1),(x2,y2) = find_borders(file_html)
@@ -12,10 +13,39 @@ def find_tablesCamelot(file,file_html,pages,**kwargs):
     # Gerar pdf a apenas com oque estiver contido dentro do retangulo
     print('Extracting tables with camelot ...')
     start = time.time()
-    if pages == None:
-        tables = camelot.read_pdf(temp_pdf, pages='all',line_scale=50,flavor='lattice')
-    else:
-        tables = camelot.read_pdf(temp_pdf, pages=f'{pages[0]}-{pages[1]}',line_scale=15,flavor='lattice')
+    manager = mp.Manager()
+    return_dict = manager.dict()
+    def read_pdf(temp_pdf,page,return_dict):
+        if pages == None:
+            tables = camelot.read_pdf(temp_pdf, pages='all',line_scale=15,flavor='lattice')
+        else:
+            tables = camelot.read_pdf(temp_pdf, pages=f'{page}-{page}',line_scale=15,flavor='lattice')
+        return_dict['tables'] = tables
+
+    patience_constant = 1.5
+    max_patience = int(pages[-1]*patience_constant if pages is not None else len(file_html.find_all('page'))*patience_constant)
+    print(f'Max patience for detect tables: {max_patience}(s)')
+    def execute_camelot(patience):
+        p = mp.Process(target=read_pdf,args=(temp_pdf,pages,return_dict,))
+        p.start()
+        i = 0
+        while p.is_alive():
+            p.join(1)
+            i += 1
+            if p.is_alive():
+                if i > patience:
+                    p.terminate()
+                    p.join()
+                    return None
+            else:
+                retorno = return_dict.get('tables',None)
+                print('wizard process finished')
+                return retorno
+        
+    tables = execute_camelot(max_patience)
+    print('Tables found')
+    if tables is None:
+        raise Exception('Timeout na detecção de tabelas com camelot')
     os.remove(temp_pdf)
     if len(tables) == 0:
         print('No tables found')
