@@ -10,7 +10,7 @@ You need to have Python installed on your machine. You can download Python [here
 ### Installing
 Clone the repository to your local machine:
 ```
-git clone git@github.com:LordWaif/lima.git
+git clone git@github.com:LordWaif/pdf-rtt.git
 ```
 Install the spacy and poppler:
 ```
