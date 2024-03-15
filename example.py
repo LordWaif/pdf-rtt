@@ -7,7 +7,7 @@ out = Path('example_bbox.pdf')
 html = Path('example.html')
 txt = Path('example.txt')
 # Define the pages to process
-pages = (1, -1)
+pages = (1, 5)
 
 '''
 file (str): The path to the PDF file.
