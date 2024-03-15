@@ -2,12 +2,12 @@ from preprocesser import preprocess_pdf
 from pathlib import Path
 
 # Define the file paths
-file = Path('example.pdf')
+file = Path('Diário Oficial de Teresina_04-01-2024_3672.pdf')
 out = Path('example_bbox.pdf')
 html = Path('example.html')
 txt = Path('example.txt')
 # Define the pages to process
-pages = (1, 2)
+pages = (1, 5)
 
 '''
 file (str): The path to the PDF file.
