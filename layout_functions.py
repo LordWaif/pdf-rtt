@@ -1,9 +1,9 @@
 def isVertical(line):
     """
-    Check if a line is vertical.
+    Determines whether a line is vertical or not.
 
     Args:
-        line (dict): A dictionary containing the coordinates of the line.
+        line (dict): A dictionary representing a line with 'xmin', 'ymin', 'xmax', and 'ymax' keys.
 
     Returns:
         bool: True if the line is vertical, False otherwise.
@@ -15,13 +15,16 @@ def isVertical(line):
 import statistics
 def isPDFCollumn(soup_pdf):
     """
-    Checks if the given soup_pdf is a PDF with columns.
+    Determines if a PDF document has multiple columns.
 
-    Parameters:
-    soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+    Args:
+        soup_pdf (BeautifulSoup): The parsed HTML representation of the PDF document.
 
     Returns:
-    bool: True if the PDF has columns, False otherwise.
+        tuple: A tuple containing two elements:
+            - A boolean indicating whether the document has multiple columns.
+            - A dictionary containing the separators between the columns for each page.
+
     """
     proportion_doc = 0
     pages = list(soup_pdf.find_all('page'))
@@ -61,20 +64,29 @@ def isPDFCollumn(soup_pdf):
     return proportion_doc > 1.3,separators
 
 def isPDFImage(soup_pdf):
-    from utils import _remountLine
-    if len(_remountLine(soup_pdf.find_all('line'))[1])<3:
-        return True
-    return False
-
-def find_borders(soup_pdf):
     """
-    Find the borders of a PDF.
+    Checks if the given PDF soup contains an image.
 
     Args:
         soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
 
     Returns:
-        tuple: A tuple containing the x and y coordinates of the PDF's borders.
+        bool: True if the PDF contains an image, False otherwise.
+    """
+    from utils import _remountLine
+    if len(_remountLine(soup_pdf.find_all('line'))[1]) < 3:
+        return True
+    return False
+
+def find_borders(soup_pdf):
+    """
+    Finds the minimum and maximum coordinates of the borders in a PDF represented by a BeautifulSoup object.
+
+    Args:
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+        tuple: A tuple containing the minimum and maximum coordinates of the borders in the format ((min_x, min_y), (max_x, max_y)).
     """
     lines = soup_pdf.find_all('line')
     x_coords = []
@@ -88,13 +100,13 @@ def find_borders(soup_pdf):
 
 def removeVerticalLines(soup_pdf):
     """
-    Remove vertical lines from a PDF.
+    Removes vertical lines from the given PDF soup.
 
     Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+        soup_pdf (BeautifulSoup): The PDF soup to process.
 
     Returns:
-        BeautifulSoup: The modified soup object.
+        BeautifulSoup: The modified PDF soup with vertical lines removed.
     """
     for _pg in soup_pdf.find_all('page'):
         lines = _pg.find_all('line')
@@ -103,29 +115,32 @@ def removeVerticalLines(soup_pdf):
                 line.decompose()
     return soup_pdf
 
-def reOrder(soup_pdf,separators=None):
+def reOrder(soup_pdf, separators=None):
     """
-    Reorder the lines in a PDF.
+    Reorders the lines in the given PDF soup based on the specified separators.
 
     Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF soup.
+        separators (list, optional): A list of separators used to determine the order of lines. 
+            Each separator is a list of tuples containing the top, bottom, and center coordinates 
+            of the separator line. Defaults to None.
 
     Returns:
-        BeautifulSoup: The reordered soup object.
+        BeautifulSoup: The reordered PDF soup.
+
     """
-    
     soup_pdf = removeVerticalLines(soup_pdf)
-    for _i,_pg in enumerate(soup_pdf.find_all('page')):
+    for _i, _pg in enumerate(soup_pdf.find_all('page')):
         if separators is not None:
             separator_actual = separators[_i]
             def _sort_key(x):
                 if separator_actual is not None:
-                    for _i,(top,bottom,center) in enumerate(separator_actual):
+                    for _i, (top, bottom, center) in enumerate(separator_actual):
                         if float(x.get('ymin')) > top and float(x.get('ymax')) < bottom:
                             if float(x.get('xmin')) > center:
-                                return (1,float(x.get('ymin')))
+                                return (1, float(x.get('ymin')))
                             elif float(x.get('xmax')) < center:
-                                return (0,float(x.get('ymin')))
+                                return (0, float(x.get('ymin')))
                     return (float(x.get('ymin')), float(x.get('xmin')))
                 else:
                     return (float(x.get('ymin')), float(x.get('xmin')))
@@ -142,6 +157,16 @@ def reOrder(soup_pdf,separators=None):
     return soup_pdf
 
 def numerateLines(soup_pdf):
+    """
+    Numerates the lines in the given soup_pdf object.
+
+    Args:
+        soup_pdf: The BeautifulSoup object representing the PDF.
+
+    Returns:
+        A tuple containing the modified soup_pdf object and a page_map dictionary.
+        The page_map dictionary maps each page number to a list of line numbers on that page.
+    """
     _n = 0
     page_map = {}
     for _i, pg in enumerate(soup_pdf.find_all('page')):
@@ -156,13 +181,15 @@ def numerateLines(soup_pdf):
 
 def findBlocks(soup_pdf):
     """
-    Find the blocks of a PDF.
+    Find and extract blocks from a PDF using BeautifulSoup.
 
     Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the parsed PDF.
 
     Returns:
-        list: A list of blocks.
+        list: A list of blocks, where each block is represented as a tuple containing the block coordinates,
+        block dimensions, and page height.
+
     """
     blocks = []
     for _pg in soup_pdf.find_all('page'):

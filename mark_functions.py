@@ -2,26 +2,25 @@ from reportlab.pdfgen import canvas
 from PyPDF2 import PdfReader, PdfWriter
 import io
 
-def _mark_bbox(pdf, boxers, output_pdf,pages,color=(1,0,0)):
+def _mark_bbox(pdf, boxers, output_pdf, pages, color=(1, 0, 0)):
     """
-    Mark bounding boxes on each page of a PDF document.
+    Marks bounding boxes on the specified pages of a PDF document.
 
     Args:
-        pdf (str): Path to the input PDF file.
-        boxers (list): List of bounding boxes for each page.
-        output_pdf (str): Path to the output PDF file.
-
-    Returns:
-        None
+        pdf (str): The path to the input PDF file.
+        boxers (list): A list of bounding boxes to mark on the pages. Each bounding box is represented as a tuple
+            containing the coordinates ((x, y), width, height) and the page height.
+        output_pdf (str): The path to the output PDF file.
+        pages (tuple): A tuple specifying the range of pages to mark. If None, all pages will be marked.
+        color (tuple): The RGB color values (between 0 and 1) to use for marking the bounding boxes. Default is red (1, 0, 0).
     """
     reader = PdfReader(pdf)
     writer = PdfWriter()
-    if pages != None:
-        pages_list = reader.pages[pages[0]-1:pages[1]]
+    if pages is not None:
+        pages_list = reader.pages[pages[0] - 1 : pages[1]]
     else:
         pages_list = reader.pages
-    # if pages is None:
-    #     pages = [1,len(boxers)]
+
     _c = 0
     for i, page in enumerate(pages_list):
         if len(boxers) == 0:
@@ -46,19 +45,22 @@ def _mark_bbox(pdf, boxers, output_pdf,pages,color=(1,0,0)):
         new_pdf = PdfReader(packet)
         page.merge_page(new_pdf.pages[0])
         writer.add_page(page)
-    with open(output_pdf, 'wb') as f:
+
+    with open(output_pdf, "wb") as f:
         writer.write(f)
 
 def find_coords(pdf_html, toExclude):
     """
-    Find the coordinates of lines in a PDF HTML document, excluding specific line numbers.
+    Find the coordinates of specific lines in a PDF HTML.
 
     Args:
-        pdf_html (BeautifulSoup): The parsed HTML document of the PDF.
+        pdf_html (BeautifulSoup): The parsed HTML of the PDF.
         toExclude (list): A list of line numbers to exclude.
 
     Returns:
-        list: A list of coordinates for each excluded line, grouped by page.
+        list: A nested list of coordinates for each excluded line in each page.
+              Each coordinate is represented as a tuple of the form (((xMin, yMin), width, height),page_height).
+              The page height is also included in the tuple.
     """
     if len(toExclude) == 0:
         return []
@@ -80,15 +82,17 @@ def find_coords(pdf_html, toExclude):
 
 def coords_to_line(file_html, coords_tables):
     """
-    Converts coordinates to lines based on HTML file and coordinates tables.
+    Converts coordinates to lines based on the given HTML file and coordinates tables.
 
     Args:
-        file_html (BeautifulSoup): The HTML file.
-        coords_tables (list): The list of coordinates tables.
+        file_html (BeautifulSoup): The HTML file to extract coordinates from.
+        coords_tables (list): A list of coordinates tables.
 
     Returns:
-        list: A list of coordinates for each line, grouped by page.
-        list: A list of line numbers.
+        tuple: A tuple containing two lists - `coords` and `numbers`.
+            - `coords` (list): A list of coordinates for each page, where each page contains a list of coordinates for each table.
+            - `numbers` (list): A list of numbers corresponding to each line.
+
     """
     coords = []
     numbers = []

@@ -204,6 +204,15 @@ def isUncopyable(soup_pdf):
     return (count/total) > 0.2
 
 def merge_split_words(soup_pdf):
+    """
+    Merges adjacent words in a PDF document if their x-coordinates are close enough.
+
+    Args:
+        soup_pdf (BeautifulSoup): The parsed HTML representation of the PDF document.
+
+    Returns:
+        BeautifulSoup: The modified HTML representation of the PDF document with merged words.
+    """
     for __i,_line in enumerate(soup_pdf.find_all('line')):
         _words = list(_line.find_all('word'))
         _i = 0
@@ -247,6 +256,17 @@ def merge_split_words(soup_pdf):
     return soup_pdf
 
 def extract_rectangle_from_pdf(input_pdf_path, coordinates):
+    """
+    Extracts a rectangular region from a PDF file.
+
+    Args:
+        input_pdf_path (str): The path to the input PDF file.
+        coordinates (tuple): A tuple containing the coordinates of the upper left and lower right corners of the rectangle.
+
+    Returns:
+        str: The path to the temporary file containing the extracted rectangle as a PDF.
+
+    """
     # Create a temporary file
     temp_file = tempfile.NamedTemporaryFile(delete=False,suffix='.pdf')
     # Create a PDF writer object

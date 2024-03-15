@@ -242,7 +242,7 @@ if __name__ == '__main__':
     for file in files:
         # list_files = ['927744_1982021']
         # list_files = ['ARQ-00470127000174-2023-1']
-        list_files = ['910811_572021_1693489961855.3052']
+        list_files = ['751212_332022']
         # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
         if file.stem not in list_files:
             continue
@@ -263,10 +263,10 @@ if __name__ == '__main__':
         start = time.time()
         ret = preprocess_pdf(
             file,
-            header=True,
-            footer=True,
+            header=False,
+            footer=False,
             tables=True,
-            isBbox=True,  
+            isBbox=False,  
             indentify_collumns = False,
             out_file_bbox=out, 
             out_path_html=html, 

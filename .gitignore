@@ -164,3 +164,7 @@ tables/
 imgs/
 html/
 bbox/
+
+txt
+_*
+*.pdf

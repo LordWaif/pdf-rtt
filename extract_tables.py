@@ -7,26 +7,69 @@ from layout_functions import find_borders
 import cv2
 import multiprocessing as mp
 
-def find_tablesCamelot(file,file_html,pages,**kwargs):
-    (x1,y1),(x2,y2) = find_borders(file_html)
-    temp_pdf = extract_rectangle_from_pdf(file,((x1-5,y1-5),(x2+5,y2+5)))
+def find_tablesCamelot(file, file_html, pages, **kwargs):
+    """
+    Find tables using Camelot PDF table extraction.
+
+    Args:
+        file (str): The path to the PDF file.
+        file_html (str): The path to the HTML file.
+        pages (tuple): A tuple representing the range of pages to extract tables from.
+                       If None, extract tables from all pages.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        list: A list of coordinates representing the tables' bounding boxes.
+
+    Raises:
+        Exception: If the table detection times out.
+
+    """
+    (x1, y1), (x2, y2) = find_borders(file_html)
+    temp_pdf = extract_rectangle_from_pdf(file, ((x1-5, y1-5), (x2+5, y2+5)))
+    
     # Gerar pdf a apenas com oque estiver contido dentro do retangulo
     print('Extracting tables with camelot ...')
     start = time.time()
     manager = mp.Manager()
     return_dict = manager.dict()
-    def read_pdf(temp_pdf,page,return_dict):
-        if pages == None:
-            tables = camelot.read_pdf(temp_pdf, pages='all',line_scale=15,flavor='lattice')
-        else:
-            tables = camelot.read_pdf(temp_pdf, pages=f'{page}-{page}',line_scale=15,flavor='lattice')
-        return_dict['tables'] = tables
+    
+    def read_pdf(temp_pdf, page, return_dict):
+        """
+        Read tables from a PDF file.
 
+        Args:
+            temp_pdf (str): The path to the PDF file.
+            page (int): The page number to extract tables from.
+            return_dict (dict): A dictionary to store the extracted tables.
+
+        Returns:
+            None
+
+        """
+        if pages is None:
+            tables = camelot.read_pdf(temp_pdf, pages='all', line_scale=15, flavor='lattice')
+        else:
+            tables = camelot.read_pdf(temp_pdf, pages=f'{page}-{page}', line_scale=15, flavor='lattice')
+        return_dict['tables'] = tables
+    
     patience_constant = 2.5
-    max_patience = int(pages[-1]*patience_constant if pages is not None else len(file_html.find_all('page'))*patience_constant)+60
+    max_patience = int(pages[-1] * patience_constant if pages is not None else len(file_html.find_all('page')) * patience_constant) + 60
     print(f'Max patience for detect tables: {max_patience}(s)')
+    
     def execute_camelot(patience):
-        p = mp.Process(target=read_pdf,args=(temp_pdf,pages,return_dict,))
+        """
+        Executes the Camelot PDF table extraction process.
+
+        Args:
+            patience (int): The maximum number of seconds to wait for the process to finish.
+
+        Returns:
+            list or None: A list of extracted tables if the process finishes successfully within the given patience time,
+                          otherwise returns None.
+
+        """
+        p = mp.Process(target=read_pdf, args=(temp_pdf, pages, return_dict,))
         p.start()
         i = 0
         while p.is_alive():
@@ -38,71 +81,85 @@ def find_tablesCamelot(file,file_html,pages,**kwargs):
                     p.join()
                     return None
             else:
-                retorno = return_dict.get('tables',None)
+                retorno = return_dict.get('tables', None)
                 print('wizard process finished')
                 return retorno
         
     tables = execute_camelot(max_patience)
+    
     if tables is None:
         raise Exception('Timeout na detecção de tabelas com camelot')
+    
     print('Tables found')
     os.remove(temp_pdf)
+    
     if len(tables) == 0:
         print('No tables found')
+    
     really_dimensions = [
         {
-            'width':float(page.get('width')),
-            'height':float(page.get('height'))
+            'width': float(page.get('width')),
+            'height': float(page.get('height'))
         } 
         for page in file_html.find_all('page')
     ]
-    out_path_csv = kwargs.get('out_path_csv',None)
-    coords_pages = {i:[] for i in range(len(really_dimensions))}
-    bar = tqdm(total=len(tables),desc='Finding tables camelot')
-    for _i,table in enumerate(tables):
-        # img = table._image[0]
-        # for cells in table.cells:
-        #     for cell in cells:
-        #         draw_bbox(img, (x1,y1),(x2,y2),300 / 72)     
-        # Salvar imagem
-        # if not img is None:
-        #     cv2.imwrite(f'./imgs/{_i}.png', img)
-        # print(table.df)
+    
+    out_path_csv = kwargs.get('out_path_csv', None)
+    coords_pages = {i: [] for i in range(len(really_dimensions))}
+    bar = tqdm(total=len(tables), desc='Finding tables camelot')
+    
+    for _i, table in enumerate(tables):
         founded_in_page = table.parsing_report['page']
-        if out_path_csv != None:
+        
+        if out_path_csv is not None:
             df = table.df
             if len(df) != 0:
-                df.to_csv(out_path_csv / Path(f'table_pg_{founded_in_page}_n_{_i}_bbox_{table._bbox}.csv'),index=False)
-        # print(table.parsing_report['page'])
-        if pages != None and (int(founded_in_page) > pages[1] or int(founded_in_page) < pages[0]):
+                df.to_csv(out_path_csv / Path(f'table_pg_{founded_in_page}_n_{_i}_bbox_{table._bbox}.csv'), index=False)
+        
+        if pages is not None and (int(founded_in_page) > pages[1] or int(founded_in_page) < pages[0]):
             bar.update(1)
             continue
-        actual_dimensions = really_dimensions[founded_in_page-1]
+        
+        actual_dimensions = really_dimensions[founded_in_page - 1]
         _bbox = table._bbox
         img = table._image[0]
-        ratio_width = actual_dimensions['width']/img.shape[1]
-        ratio_height = actual_dimensions['height']/img.shape[0]
-        x1,y1,x2,y2 = _bbox
-        ratio = 300/72
-        x1 = (x1*ratio)*ratio_width
-        x2 = (x2*ratio)*ratio_width
-        y1 = (y1*ratio)*ratio_height
-        y2 = (y2*ratio)*ratio_height
+        ratio_width = actual_dimensions['width'] / img.shape[1]
+        ratio_height = actual_dimensions['height'] / img.shape[0]
+        x1, y1, x2, y2 = _bbox
+        ratio = 300 / 72
+        x1 = (x1 * ratio) * ratio_width
+        x2 = (x2 * ratio) * ratio_width
+        y1 = (y1 * ratio) * ratio_height
+        y2 = (y2 * ratio) * ratio_height
         y1 = actual_dimensions['height'] - y1
         y2 = actual_dimensions['height'] - y2
-        really_width = x2-x1
-        really_height = y2-y1
-        coord = (((x1,y1),really_width,really_height),actual_dimensions['height'])
-        coords_pages[founded_in_page-1].append(coord)
+        really_width = x2 - x1
+        really_height = y2 - y1
+        coord = (((x1, y1), really_width, really_height), actual_dimensions['height'])
+        coords_pages[founded_in_page - 1].append(coord)
         bar.update(1)
+    
     bar.clear()
     bar.close()
     end = time.time()
-    print(f'(Tables) Average time per page: {(end-start)/(len(really_dimensions) if pages == None else (int(pages[1])-int(pages[0])+1))}')
+    print(f'(Tables) Average time per page: {(end - start) / (len(really_dimensions) if pages is None else (int(pages[1]) - int(pages[0]) + 1))}')
+    
     return [v for v in coords_pages.values()]
 
 def draw_bbox(img, start_point, end_point, ratio=1):
+    """
+    Draw a bounding box on the given image.
+
+    Parameters:
+    - img: The image on which to draw the bounding box.
+    - start_point: The starting point of the bounding box (top-left corner).
+    - end_point: The ending point of the bounding box (bottom-right corner).
+    - ratio: The ratio to scale the coordinates of the bounding box. Default is 1.
+
+    Returns:
+    None
+    """
     start_point = tuple(map(lambda x: round(x * ratio), start_point))
     end_point = tuple(map(lambda x: round(x * ratio), end_point))
-    print(start_point,end_point)
+    print(start_point, end_point)
     cv2.rectangle(img, start_point, end_point, (0, 255, 0), 2)
