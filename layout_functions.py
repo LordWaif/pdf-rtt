@@ -52,7 +52,6 @@ def isPDFCollumn(soup_pdf):
         proportion_doc += proportion
 
         primeira_moda = statistics.mode([separator[2] for separator in separators[_i]])
-        qtd_primeira_moda = len([separator[2] for separator in separators[_i] if separator[2] == primeira_moda])
         top_primeira_moda = min([separator[0] for separator in separators[_i] if separator[2] == primeira_moda])
         bottom_primeira_moda = max([separator[1] for separator in separators[_i] if separator[2] == primeira_moda])
 
