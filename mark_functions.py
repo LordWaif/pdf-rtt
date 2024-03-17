@@ -103,15 +103,49 @@ def coords_to_line(file_html, coords_tables):
             ((x,y),w,h),_ = table
             for _l,_line in enumerate(_page.find_all('line')):
                 number = int(_line.get('number'))
-                xMin = float(_line.get('xmin'))
-                yMin = float(_line.get('ymin'))
-                xMax = float(_line.get('xmax'))
-                yMax = float(_line.get('ymax'))
+                xMin = round(float(_line.get('xmin')),2)
+                yMin = round(float(_line.get('ymin')),2)
+                xMax = round(float(_line.get('xmax')),2)
+                yMax = round(float(_line.get('ymax')),2)
                 width = xMax - xMin
                 height = yMax - yMin
                 page_height = float(_page.get('height'))
-                if xMin>=x and y>=yMin and x+w>=xMax and y+h<=yMax:
+                if xMin>=round(x,2) and yMin>=round(y,2) and round(x+w,2)>=xMax and round(y+h,2)>=yMax:
                     coords_page.append((((xMin,yMin),width,height),page_height))
                     numbers.append(number)
         coords.append(coords_page)
     return coords,numbers
+
+def coords_to_section(file_html, coords_lines_section):
+    coords = []
+    id_sections = []
+
+    coords_anexo = []
+    id_sections_anexo = []
+    for _t,(coords_section,_type) in enumerate(coords_lines_section):
+        number_l = []
+        coords_page = []
+        ((x,y),w,h),pg_height,page,block_section = coords_section
+        # x,y = round(x,3),round(y,3)
+        pages = list(file_html.find_all('page'))
+        page_to_search = pages[page]
+        for _l,_line in enumerate(page_to_search.find_all('line')):
+            number = int(_line.get('number'))
+            xMin = float(_line.get('xmin'))
+            yMin = float(_line.get('ymin'))
+            xMax = float(_line.get('xmax'))
+            yMax = float(_line.get('ymax'))
+            width = xMax - xMin
+            height = yMax - yMin
+            page_height = pg_height
+            if xMin>=x and yMin>=y and w>=xMax and h>=yMax:
+                coords_page.append((((xMin,yMin),width,height),page_height))
+                block_section.append(_line)
+                number_l.append(number)
+        if _type == 'secao':
+            coords.append(coords_page)
+            id_sections.append(number_l)
+        elif _type == 'anexo':
+            coords_anexo.append(coords_page)
+            id_sections_anexo.append(number_l)
+    return (coords,id_sections),(coords_anexo,id_sections_anexo)

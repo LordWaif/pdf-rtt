@@ -10,7 +10,7 @@ def isVertical(line):
     """
     delta_y = float(line.get('ymax')) - float(line.get('ymin'))
     delta_x = float(line.get('xmax')) - float(line.get('xmin'))
-    return delta_y > delta_x
+    return  delta_y / delta_y < 0.8
 
 import statistics
 def isPDFCollumn(soup_pdf):
@@ -108,11 +108,13 @@ def removeVerticalLines(soup_pdf):
     Returns:
         BeautifulSoup: The modified PDF soup with vertical lines removed.
     """
-    for _pg in soup_pdf.find_all('page'):
+    for _p,_pg in enumerate(soup_pdf.find_all('page')):
         lines = _pg.find_all('line')
         for line in lines:
             if isVertical(line):
                 line.decompose()
+        if _p > 3:
+            break
     return soup_pdf
 
 def reOrder(soup_pdf, separators=None):
@@ -130,6 +132,7 @@ def reOrder(soup_pdf, separators=None):
 
     """
     soup_pdf = removeVerticalLines(soup_pdf)
+    parents_changed = []
     for _i, _pg in enumerate(soup_pdf.find_all('page')):
         if separators is not None:
             separator_actual = separators[_i]
@@ -154,7 +157,36 @@ def reOrder(soup_pdf, separators=None):
             oldParent = oldParents[_i]
             newElement = line
             oldParent.append(newElement)
+            parents_changed.extend([oldParent])
     return soup_pdf
+
+def restore_blocks(soup_pdf):
+    """
+    Restores blocks in the given soup_pdf by removing empty flows and updating block attributes.
+
+    Args:
+        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
+
+    Returns:
+        BeautifulSoup: The modified soup_pdf with restored blocks.
+    """
+    for _flow in soup_pdf.find_all('flow'):
+        childrens = _flow.find_all('line')
+        if len(childrens) == 0:
+            _flow.decompose()
+    for _block in soup_pdf.find_all('block'):
+        childrens = _block.find_all('line')
+        if len(childrens) == 0:
+            _block.decompose()
+            continue
+        xmin = min([float(child.get('xmin')) for child in childrens])
+        xmax = max([float(child.get('xmax')) for child in childrens])
+        ymin = min([float(child.get('ymin')) for child in childrens])
+        ymax = max([float(child.get('ymax')) for child in childrens])
+        attr = {'xmin':str(xmin),'xmax':str(xmax),'ymin':str(ymin),'ymax':str(ymax)}
+        _block.attrs = attr
+    return soup_pdf
+
 
 def numerateLines(soup_pdf):
     """
@@ -205,3 +237,143 @@ def findBlocks(soup_pdf):
             _block_page.append((((xMin, yMin), width, height), float(_pg.get('height'))))
         blocks.append(_block_page)
     return blocks
+
+def merge_split_words(soup_pdf):
+    """
+    Merges adjacent words in a PDF document if their x-coordinates are close enough.
+
+    Args:
+        soup_pdf (BeautifulSoup): The parsed HTML representation of the PDF document.
+
+    Returns:
+        BeautifulSoup: The modified HTML representation of the PDF document with merged words.
+    """
+    for __i,_line in enumerate(soup_pdf.find_all('line')):
+        _words = list(_line.find_all('word'))
+        _i = 0
+        word = ''
+        attrs = {}
+        _initial_indice = float('-inf')
+        isInside = False
+        while _i < len(_words):
+            try:
+                if _i+1 == len(_words):
+                    string_prox = _words[_i-1]
+                    xmin_prox = float(_words[_i-1].get('xmin'))
+                else:
+                    string_prox = _words[_i+1]
+                    xmin_prox = float(_words[_i+1].get('xmin'))
+            except:
+                _i += 1
+                continue
+            xmax_act = float(_words[_i].get('xmax'))
+            if abs(xmin_prox-xmax_act)< 1.5:
+                if not isInside:
+                    _initial_indice = _i
+                    attrs = _words[_i].attrs
+                    word = _words[_i].string + string_prox.string
+                    isInside = True
+                else:
+                    attrs['xmax'] = str(max(float(_words[_i].get('xmax')),float(string_prox.get('xmax'))))
+                    word += string_prox.string
+            else:
+                if word != '':
+                    _words[_initial_indice].string = word
+                    _words[_initial_indice].attrs = attrs
+                    for _ in range(_initial_indice+1,_i+1):
+                        _words[_].decompose()
+                attrs = {}
+                _initial_indice = float('-inf')
+                isInside = False
+                word = ''
+
+            _i += 1
+    return soup_pdf
+
+def merge_split_lines(soup_pdf):
+    """
+    Merges split lines in a given PDF soup.
+
+    Args:
+        soup_pdf: The BeautifulSoup object representing the PDF soup.
+
+    Returns:
+        The modified soup with merged lines.
+    """
+    for _p,_page in enumerate(soup_pdf.find_all('page')):
+        last_line = None
+        inside_line = False
+        for _l,_line in enumerate(_page.find_all('line')):
+            if not inside_line:
+                last_line = _line
+                inside_line = True
+                continue
+            else:
+                actual = _line
+                if round(float(actual.get('ymin')),3) == round(float(last_line.get('ymin')),3) and round(float(actual.get('ymax')),3) == round(float(last_line.get('ymax')),3):
+                    for _w in actual.find_all('word'):
+                        last_line.append(_w)
+                    attrs = last_line.attrs
+                    attrs['xmax'] = str(float(actual.get('xmax')))
+                    last_line.attrs = attrs
+                    attrs_parent = last_line.parent.attrs
+                    attrs_parent['xmax'] = max([_.get('xmax') for _ in last_line.parent.find_all('line')])
+                    actual.decompose()
+                    # print(' '.join([_w.get_text() for _w in last_line.find_all('word')]))
+                else:
+                    last_line = actual
+    return soup_pdf
+
+
+from mark_functions import coords_to_section
+
+def found_sections_with_more_then_one_line(sections, soup_pdf, toExcludeSummarization):
+    """
+    Finds sections with more than one line.
+
+    Args:
+        sections (list): A list of sections.
+        soup_pdf: The soup_pdf object.
+        toExcludeSummarization (list): A list of sections to exclude from summarization.
+
+    Returns:
+        tuple: A tuple containing two lists. The first list contains the sections found, and the second list contains the coordinates of the parents.
+
+    """
+    sections_without_summarization = []
+    page_id = []
+    page_heights = []
+    sections_lines = []
+    _type = []
+    for sec in sections:
+        number = int(sec[2].get('number'))
+        if len(toExcludeSummarization) != 0 and number <= toExcludeSummarization[-1]:
+            continue
+        line = sec[2]
+        sections_without_summarization.append(line)
+        page_heights.append(float(sec[1]))
+        page_id.append(sec[0])
+        sections_lines.append(number)
+        _type.append(sec[3])
+
+    parents = [
+        (sec.parent,h,pg,_t) 
+        for sec,h,pg,_t in zip(sections_without_summarization,page_heights,page_id,_type)
+            if int(sec.get('number')) in sections_lines and sec.parent.name == 'block'
+    ]
+    coords_parents = []
+    after_anexo = False
+    for _parent,_h,_pg,_t in parents:
+        if _t == 'anexo':
+            after_anexo = True
+        xmin = float(_parent.get('xmin'))
+        ymin = float(_parent.get('ymin'))
+        xmax = float(_parent.get('xmax'))
+        ymax = float(_parent.get('ymax'))
+        coord = (((xmin, ymin), xmax, ymax),_h,_pg,_parent)
+        if not after_anexo: 
+            coords_parents.append((coord,'secao'))
+        else:
+            coords_parents.append((coord,'anexo'))
+    (coords_parents, sections_founded),(coords_parents_anexo,sections_founded_anexo) = coords_to_section(soup_pdf,coords_parents)
+    return (coords_parents, sections_founded),(coords_parents_anexo,sections_founded_anexo)

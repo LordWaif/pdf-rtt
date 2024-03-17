@@ -1,10 +1,13 @@
-from utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord,isUncopyable,merge_split_words
+from utils import generateGroups,_remountLine,exclude_lines,_remountLinesWithCoord,isUncopyable
 from extract_rectangles import find_rectangles
 from header_detection import removeHeader
 from footer_detection import removeFooter
 from mark_functions import _mark_bbox,find_coords,coords_to_line
 from extract_tables import find_tablesCamelot
-from layout_functions import isPDFImage
+from layout_functions import isPDFImage,merge_split_words,found_sections_with_more_then_one_line,restore_blocks
+from extract_sections import identify_sections
+import shutil
+
 import warnings,time
 
 def removeHeaderAndFooter(
@@ -137,6 +140,76 @@ def removeTableCamelot(file, file_html, pages,**kwargs):
     """
     return find_tablesCamelot(file, file_html, pages,**kwargs)
 
+def process_tables(file, soup_pdf, pages, isBbox, out_file_bbox, **kwargs):
+    """
+    Process tables in a PDF file.
+
+    Args:
+        file (str): The path to the PDF file.
+        soup_pdf (str): The parsed PDF content.
+        pages (list): The list of pages to process.
+        isBbox (bool): Flag indicating whether to mark bounding boxes.
+        origin_file (str): The path to the original file.
+        out_file_bbox (str): The path to the output file with bounding boxes.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        tuple: A tuple containing the following elements:
+            - coord_tables_camelot (list): The coordinates of tables detected by Camelot.
+            - coords_inside_tables (list): The coordinates of lines inside tables.
+            - toExcludeLinesTables (list): The coordinates of lines to exclude from tables.
+    """
+    coord_tables_camelot = removeTableCamelot(file, soup_pdf, pages, **kwargs)
+    coords_inside_tables, toExcludeLinesTables = coords_to_line(soup_pdf, coord_tables_camelot)
+    if isBbox:
+        _mark_bbox(out_file_bbox.__str__(), coord_tables_camelot, out_file_bbox.__str__(), pages=pages, color=(0.447, 0.055, 0.58))
+        _mark_bbox(out_file_bbox.__str__(), coords_inside_tables, out_file_bbox.__str__(), pages=pages, color=(0.447, 0.055, 0.58))
+    return coord_tables_camelot, coords_inside_tables, toExcludeLinesTables
+
+def process_header_footer(groups,soup_pdf, page_mapping, header, footer, isBbox, origin_file, out_file_bbox, **kwargs):
+    """
+    Process the header and footer of a document.
+
+    Args:
+        groups (list): List of groups.
+        page_mapping (dict): Mapping of pages.
+        header (str): Header string.
+        footer (str): Footer string.
+        isBbox (bool): Flag indicating if bounding box should be marked.
+        origin_file (str): Path to the original file.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        tuple: A tuple containing the processed content without header and footer, and the updated origin file path.
+    """
+    toExcludeHeaderAndFooter = removeHeaderAndFooter(groups, page_mapping, header=header, footer=footer, **kwargs)
+    if isBbox:
+        mark_bbox(soup_pdf, toExcludeHeaderAndFooter, file, out_file_bbox, pages=pages)
+        origin_file = out_file_bbox
+    return toExcludeHeaderAndFooter, origin_file
+
+def process_summarization(soup_pdf, out_file_bbox, isBbox, pages):
+    """
+    Process the summarization of a PDF document.
+
+    Args:
+        soup_pdf (BeautifulSoup): The parsed HTML representation of the PDF document.
+        out_file_bbox (str): The output file path for the bounding box.
+        pages (int): The number of pages in the PDF document.
+
+    Returns:
+        list: The lines to be excluded from the summarization.
+
+    """
+    sections, summary_lines = identify_sections(soup_pdf)
+    toExcludeSummarization = summary_lines
+    (coords_parents, sections_founded),(coords_parents_anexo,sections_founded_anexo) = found_sections_with_more_then_one_line(sections,soup_pdf,toExcludeSummarization)
+    print(f'Founded {len(sections_founded)} sections and {len(sections_founded_anexo)} anexos')
+    if isBbox:
+        mark_bbox(soup_pdf, toExcludeSummarization, out_file_bbox, out_file_bbox, pages=pages, color=(0.5, 0.5, 1))
+        mark_bbox(soup_pdf, [_ for _l in sections_founded for _ in _l], out_file_bbox, out_file_bbox, pages=pages, color=(0, 0, 1))
+        mark_bbox(soup_pdf, [_ for _l in sections_founded_anexo for _ in _l], out_file_bbox, out_file_bbox, pages=pages, color=(0, 1, 0))
+    return toExcludeSummarization,sections_founded,sections_founded_anexo
 def preprocess_pdf(
         file:str,
         pages:list=None,
@@ -145,6 +218,8 @@ def preprocess_pdf(
         header=True,
         footer=True,
         tables=True,
+        identify_sections=True,
+        segment_txt_by_section=False,
         indentify_collumns=True,
         out_file_bbox:str=None,
         out_path_html:str=None,
@@ -176,11 +251,9 @@ def preprocess_pdf(
     groups,soup_pdf,page_mapping = generateGroups(file,pages=pages,indentify_collumns=indentify_collumns)
     len_pages = len(groups[0])
     start = time.time()
-    # from utils import find_borders
-    # (x1,y1),(x2,y2) = find_borders(soup_pdf)
-    # print(f'File {file} has borders: {x1,y1,x2,y2}')
-    # _mark_bbox(file, [[(((x1,y1),x2-x1,y2-y1),842.00)]], out_file_bbox,pages=pages,color=(0,0,1))
-    # exit()
+    if not identify_sections:
+        segment_txt_by_section = False
+
     toExclude = []
     if isPDFImage(soup_pdf):
         print(f'File {file} is a PDF image')
@@ -189,7 +262,14 @@ def preprocess_pdf(
         print(f'File {file} is uncopyable')
         return False,'Uncopyable'
     origin_file = file
+    
+    if isBbox:
+        if not out_file_bbox:
+            out_file_bbox = file
+        else:
+            shutil.copy(origin_file,out_file_bbox)
 
+    # Remove rectangles
     if rectangles:
         coord_rectangles = removeRectangles(file)
         coords_inside_rectangles, toExcludeRectangles = coords_to_line(soup_pdf,coord_rectangles)
@@ -199,31 +279,67 @@ def preprocess_pdf(
     else:
        toExcludeRectangles = []
 
-    toExcludeHeaderAndFooter = removeHeaderAndFooter(groups,page_mapping,header=header,footer=footer,**kwargs)
-    if isBbox:
-        if not out_file_bbox:
-            out_file_bbox = file
-        mark_bbox(soup_pdf,toExcludeHeaderAndFooter,file,out_file_bbox,pages=pages)
-        origin_file = out_file_bbox
+    # Remove header and footer
+    if header or footer:
+        toExcludeHeaderAndFooter,origin_file = process_header_footer(groups,soup_pdf,page_mapping,header,footer,isBbox,out_file_bbox,out_file_bbox,**kwargs)
     else:
         toExcludeHeaderAndFooter = []
 
+    # Remove tables
     if tables:
-        coord_tables_camelot = removeTableCamelot(file,soup_pdf,pages,out_path_csv=out_path_csv)
-        #print('Tables coordinates: ', coord_tables_camelot)
-        coords_inside_tables,toExcludeLinesTables = coords_to_line(soup_pdf,coord_tables_camelot)
-        if isBbox:
-            _mark_bbox(origin_file.__str__(), coord_tables_camelot, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
-            _mark_bbox(out_file_bbox.__str__(), coords_inside_tables, out_file_bbox.__str__(),pages=pages,color=(0.447, 0.055, 0.58))
+        _,_,toExcludeLinesTables = process_tables(file,soup_pdf,pages,isBbox,out_file_bbox,**kwargs)
     else:
         toExcludeLinesTables = []
 
-    toExclude = toExcludeRectangles+toExcludeHeaderAndFooter+toExcludeLinesTables
+    # Remove summarization
+    if identify_sections:
+        toExcludeSummarization,lines_section,lines_anexo = process_summarization(soup_pdf,out_file_bbox,isBbox,pages)
+    else:
+        toExcludeSummarization = []
+            
+    toExclude = toExcludeRectangles+toExcludeHeaderAndFooter+toExcludeLinesTables+toExcludeSummarization
+    
+    soup_pdf = restore_blocks(soup_pdf)
     soup_pdf = exclude_lines(soup_pdf, toExclude)
-    soup_pdf = merge_split_words(soup_pdf)
+    if segment_txt_by_section:
+        def find_section(soup_pdf,section_init,section_end):
+            content = []
+            name = None
+            for _l in soup_pdf.find_all('line'):
+                if _l.get('number') == section_init[0]:
+                    name = _remountLine([_l])[1][0]
+                    continue
+                if int(_l.get('number')) > section_init[-1] and int(_l.get('number')) < section_end[0]:
+                    content.append(_l)
+            content = '\n'.join(_remountLine(content)[1])
+            return content,name
+        for _n in lines_section:
+            # print('Section:',_n)
+            # print(' '.join(_w.string for _w in soup_pdf.find('line',attrs={'number':_n}).find_all('word')))
+            ...
+        def segment_and_save(soup_pdf,lines_section,lines_anexo,out_path_txt):
+            i = 1
+            for _i in range(len(lines_section)):
+                if _i == len(lines_section)-1:
+                    _s_init = lines_section[_i]
+                    _s_end = lines_anexo[0]
+                else:
+                    _s_init = lines_section[_i]
+                    _s_end = lines_section[_i+1]
+                if len(_s_init) == 0 or len(_s_end) == 0:
+                    continue
+                content,name = find_section(soup_pdf,_s_init,_s_end)
+                folder = out_path_txt.parent / out_path_txt.stem
+                folder.mkdir(parents=True,exist_ok=True)
+                out_path_txt_sec = folder / pathlib.Path(f'{i}_{name}'+'.txt')
+                i += 1
+                with open(out_path_txt_sec.__str__(),'w') as f:
+                    f.write(content)
+        segment_and_save(soup_pdf,lines_section,lines_anexo,out_path_txt)
+
     if out_path_html:
         save_html(out_path_html,soup_pdf)
-    if out_path_txt:
+    if out_path_txt and not segment_txt_by_section:
         save_txt(out_path_txt,soup_pdf)
     if out_path_html is None and out_path_txt is None:
         return _remountLine(soup_pdf.find_all('line'))[1]
@@ -235,17 +351,19 @@ def preprocess_pdf(
 if __name__ == '__main__': 
     import pathlib,json,time
     from tqdm import tqdm
-    files = list(pathlib.Path('./.pdf_files').glob('*.pdf'))
+    files = list(pathlib.Path('./.pdf_extras').glob('*.pdf'))
     bar = tqdm(total=len(files),desc='Processing')
     errosFiles = {'Uncopyable':[],'PDFImage':[]}
     # Preprocess the files
     for file in files:
-        # list_files = ['927744_1982021']
+        print('Processing file:',file.__str__())
+        # list_files = ['40001_12013']
+        # list_files = ['10001_122021']
         # list_files = ['ARQ-00470127000174-2023-1']
-        list_files = ['751212_332022']
-        # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
-        if file.stem not in list_files:
-            continue
+        # list_files = ['Fiscalizacao de fraudes em licitacoes a partir de uma rede']
+        # # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        # if file.stem not in list_files:
+        #     continue
         # Create the directories to save the files
         if not (file.parent.absolute().parent /pathlib.Path('bbox')).exists():
             (file.parent.absolute().parent /pathlib.Path('bbox')).mkdir()
@@ -263,10 +381,13 @@ if __name__ == '__main__':
         start = time.time()
         ret = preprocess_pdf(
             file,
-            header=False,
-            footer=False,
+            header=True,
+            footer=True,
             tables=True,
-            isBbox=False,  
+            identify_sections=True,
+            segment_txt_by_section=True,
+            isBbox=True,  
+            rectangles=False,
             indentify_collumns = False,
             out_file_bbox=out, 
             out_path_html=html, 

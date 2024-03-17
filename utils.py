@@ -1,6 +1,7 @@
 import bs4
 import subprocess
 from layout_functions import numerateLines,isPDFCollumn
+from layout_functions import merge_split_words,merge_split_lines,restore_blocks
 from PyPDF2 import PdfWriter, PdfReader
 import tempfile
 
@@ -69,8 +70,11 @@ def generateGroups(path, pages,indentify_collumns=False):
         soup = reOrder(soup,collumns)
     else:
         soup = reOrder(soup)
+    from preprocesser import save_html
+    soup = merge_split_words(soup)
+    soup = merge_split_lines(soup)
     soup, page_map = numerateLines(soup)
-    from layout_functions import findBlocks
+    # from layout_functions import findBlocks
     # coords_blocks = findBlocks(soup)
     # from mark_functions import _mark_bbox
     # _mark_bbox(path, coords_blocks, 'pdf_marked.pdf',pages)
@@ -203,57 +207,7 @@ def isUncopyable(soup_pdf):
     count = sum([1 for char in chars if char.find('%') != -1 or char.find('<') != -1 or char.find('&') != -1 or char.find('/') != -1])
     return (count/total) > 0.2
 
-def merge_split_words(soup_pdf):
-    """
-    Merges adjacent words in a PDF document if their x-coordinates are close enough.
 
-    Args:
-        soup_pdf (BeautifulSoup): The parsed HTML representation of the PDF document.
-
-    Returns:
-        BeautifulSoup: The modified HTML representation of the PDF document with merged words.
-    """
-    for __i,_line in enumerate(soup_pdf.find_all('line')):
-        _words = list(_line.find_all('word'))
-        _i = 0
-        word = ''
-        attrs = {}
-        _initial_indice = float('-inf')
-        isInside = False
-        while _i < len(_words):
-            try:
-                if _i+1 == len(_words):
-                    string_prox = _words[_i-1]
-                    xmin_prox = float(_words[_i-1].get('xmin'))
-                else:
-                    string_prox = _words[_i+1]
-                    xmin_prox = float(_words[_i+1].get('xmin'))
-            except:
-                _i += 1
-                continue
-            xmax_act = float(_words[_i].get('xmax'))
-            if abs(xmin_prox-xmax_act)< 1.5:
-                if not isInside:
-                    _initial_indice = _i
-                    attrs = _words[_i].attrs
-                    word = _words[_i].string + string_prox.string
-                    isInside = True
-                else:
-                    attrs['xmax'] = str(max(float(_words[_i].get('xmax')),float(string_prox.get('xmax'))))
-                    word += string_prox.string
-            else:
-                if word != '':
-                    _words[_initial_indice].string = word
-                    _words[_initial_indice].attrs = attrs
-                    for _ in range(_initial_indice+1,_i+1):
-                        _words[_].decompose()
-                attrs = {}
-                _initial_indice = float('-inf')
-                isInside = False
-                word = ''
-
-            _i += 1
-    return soup_pdf
 
 def extract_rectangle_from_pdf(input_pdf_path, coordinates):
     """
