@@ -140,7 +140,7 @@ def removeTableCamelot(file, file_html, pages,**kwargs):
     """
     return find_tablesCamelot(file, file_html, pages,**kwargs)
 
-def process_tables(file, soup_pdf, pages, isBbox, out_file_bbox, **kwargs):
+def process_tables(file, soup_pdf, pages, isBbox, out_file_bbox,**kwargs):
     """
     Process tables in a PDF file.
 
@@ -159,7 +159,7 @@ def process_tables(file, soup_pdf, pages, isBbox, out_file_bbox, **kwargs):
             - coords_inside_tables (list): The coordinates of lines inside tables.
             - toExcludeLinesTables (list): The coordinates of lines to exclude from tables.
     """
-    coord_tables_camelot = removeTableCamelot(file, soup_pdf, pages, **kwargs)
+    coord_tables_camelot = removeTableCamelot(file, soup_pdf, pages,**kwargs)
     coords_inside_tables, toExcludeLinesTables = coords_to_line(soup_pdf, coord_tables_camelot)
     if isBbox:
         _mark_bbox(out_file_bbox.__str__(), coord_tables_camelot, out_file_bbox.__str__(), pages=pages, color=(0.447, 0.055, 0.58))
@@ -202,6 +202,17 @@ def process_summarization(soup_pdf, out_file_bbox, isBbox, pages):
 
     """
     sections, summary_lines = identify_sections(soup_pdf)
+    for _ic,(_i,_page_height,_line,_type) in enumerate(sections):
+        ymin = float(_line.get('ymin'))
+        range_y = ymin - 3.5
+        # existe alguma linha que esta dentro do range_y
+        # print(' '.join([_w.get_text() for _w in _line.find_all('word')]))
+        # print(str(int(_line.get('number'))-1))
+        anterior_line = soup_pdf.find('line',attrs={'number':str(int(_line.get('number'))-1)})
+        if float(anterior_line.get('ymax')) > range_y:
+            sections.pop(_ic)
+            # print('Não é uma linha de seção')
+    
     toExcludeSummarization = summary_lines
     (coords_parents, sections_founded),(coords_parents_anexo,sections_founded_anexo) = found_sections_with_more_then_one_line(sections,soup_pdf,toExcludeSummarization)
     print(f'Founded {len(sections_founded)} sections and {len(sections_founded_anexo)} anexos')
@@ -225,6 +236,7 @@ def preprocess_pdf(
         out_path_html:str=None,
         out_path_txt:str=None,
         out_path_csv:str=None,
+        out_path_json:str=None,
         **kwargs
     ):
     """
@@ -253,7 +265,7 @@ def preprocess_pdf(
     start = time.time()
     if not identify_sections:
         segment_txt_by_section = False
-
+    data_json = {'secoes':{}}
     toExclude = []
     if isPDFImage(soup_pdf):
         print(f'File {file} is a PDF image')
@@ -287,7 +299,7 @@ def preprocess_pdf(
 
     # Remove tables
     if tables:
-        _,_,toExcludeLinesTables = process_tables(file,soup_pdf,pages,isBbox,out_file_bbox,**kwargs)
+        _,_,toExcludeLinesTables = process_tables(file,soup_pdf,pages,isBbox,out_file_bbox,out_path_csv=out_path_csv,**kwargs)
     else:
         toExcludeLinesTables = []
 
@@ -313,33 +325,42 @@ def preprocess_pdf(
                     content.append(_l)
             content = '\n'.join(_remountLine(content)[1])
             return content,name
-        for _n in lines_section:
-            # print('Section:',_n)
-            # print(' '.join(_w.string for _w in soup_pdf.find('line',attrs={'number':_n}).find_all('word')))
-            ...
-        def segment_and_save(soup_pdf,lines_section,lines_anexo,out_path_txt):
+        def segment_and_save(soup_pdf,data_json,lines_section,lines_anexo,out_path_txt,out_path_json=None):
             i = 1
             for _i in range(len(lines_section)):
-                if _i == len(lines_section)-1:
+                if _i == len(lines_section)-1 and len(lines_anexo) > 0:
                     _s_init = lines_section[_i]
                     _s_end = lines_anexo[0]
+                elif _i == len(lines_section)-1 and len(lines_anexo) == 0:
+                    _s_init = lines_section[_i]
+                    _s_end = [len(soup_pdf.find_all('line'))]
                 else:
                     _s_init = lines_section[_i]
                     _s_end = lines_section[_i+1]
                 if len(_s_init) == 0 or len(_s_end) == 0:
                     continue
                 content,name = find_section(soup_pdf,_s_init,_s_end)
-                folder = out_path_txt.parent / out_path_txt.stem
-                folder.mkdir(parents=True,exist_ok=True)
-                out_path_txt_sec = folder / pathlib.Path(f'{i}_{name}'+'.txt')
-                i += 1
-                with open(out_path_txt_sec.__str__(),'w') as f:
-                    f.write(content)
-        segment_and_save(soup_pdf,lines_section,lines_anexo,out_path_txt)
+                if out_path_json is not None:
+                    data_json['secoes'][name] = {
+                        'init':_s_init[-1],
+                        'end':_s_end[0],
+                        'content':content
+                        }
+                if out_path_txt is not None:
+                    folder = out_path_txt.parent / out_path_txt.stem
+                    folder.mkdir(parents=True,exist_ok=True)
+                    out_path_txt_sec = folder / pathlib.Path(f'{i}_{name}'+'.txt')
+                    i += 1
+                    with open(out_path_txt_sec.__str__(),'w') as f:
+                        f.write(content)
+            if out_path_json is not None:
+                with open(out_path_json.__str__(),'w') as f:
+                    json.dump(data_json,f,indent=4,ensure_ascii=False)
+        segment_and_save(soup_pdf,data_json,lines_section,lines_anexo,out_path_txt,out_path_json)
 
     if out_path_html:
         save_html(out_path_html,soup_pdf)
-    if out_path_txt and not segment_txt_by_section:
+    if out_path_txt and not (segment_txt_by_section or out_path_json):
         save_txt(out_path_txt,soup_pdf)
     if out_path_html is None and out_path_txt is None:
         return _remountLine(soup_pdf.find_all('line'))[1]
@@ -356,14 +377,15 @@ if __name__ == '__main__':
     errosFiles = {'Uncopyable':[],'PDFImage':[]}
     # Preprocess the files
     for file in files:
-        print('Processing file:',file.__str__())
         # list_files = ['40001_12013']
-        # list_files = ['10001_122021']
-        # list_files = ['ARQ-00470127000174-2023-1']
-        # list_files = ['Fiscalizacao de fraudes em licitacoes a partir de uma rede']
-        # # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
+        # # list_files = ['10001_122021']
+        # # list_files = ['ARQ-16854531000181-2023-4']
+        # # list_files = ['160171_82016']
+        # # # list_files = ['Fiscalizacao de fraudes em licitacoes a partir de uma rede']
+        # # # # list_files = ['Diário Oficial de Teresina_04-01-2024_3672']
         # if file.stem not in list_files:
         #     continue
+        print('Processing file:',file.__str__())
         # Create the directories to save the files
         if not (file.parent.absolute().parent /pathlib.Path('bbox')).exists():
             (file.parent.absolute().parent /pathlib.Path('bbox')).mkdir()
@@ -375,7 +397,8 @@ if __name__ == '__main__':
         out = file.parent.absolute().parent /pathlib.Path('bbox') / pathlib.Path(file.stem+'_bbox.pdf')
         html = file.parent.absolute().parent /pathlib.Path('html') / pathlib.Path(file.stem+'_html.html')
         txt = file.parent.absolute().parent /pathlib.Path('txt') / pathlib.Path(file.stem+'_txt.txt')
-        tables = file.parent.absolute().parent /pathlib.Path('tables')
+        js = file.parent.absolute().parent /pathlib.Path('txt') / pathlib.Path(file.stem+'_json.json')
+        tables = file.parent.absolute().parent /pathlib.Path('tables') / pathlib.Path(file.stem)
         # Preprocess the file
         pages = None
         start = time.time()
@@ -386,13 +409,14 @@ if __name__ == '__main__':
             tables=True,
             identify_sections=True,
             segment_txt_by_section=True,
-            isBbox=True,  
+            isBbox=False,  
             rectangles=False,
             indentify_collumns = False,
             out_file_bbox=out, 
-            out_path_html=html, 
-            out_path_txt=txt,
-            out_path_csv=None, 
+            out_path_html=None, 
+            out_path_txt=None,
+            out_path_csv=tables, 
+            out_path_json=js,
             pages=pages, 
             min_chain=3, 
             max_lines_header=5, 

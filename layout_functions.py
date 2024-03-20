@@ -310,11 +310,15 @@ def merge_split_lines(soup_pdf):
                 continue
             else:
                 actual = _line
-                if round(float(actual.get('ymin')),3) == round(float(last_line.get('ymin')),3) and round(float(actual.get('ymax')),3) == round(float(last_line.get('ymax')),3):
+                if abs(float(actual.get('ymin')) - float(last_line.get('ymin')))<0.2 and abs(float(actual.get('ymax')) - float(last_line.get('ymax')))<0.2:
+                    attrs = last_line.attrs
+                    if float(actual.get('xmin')) < float(last_line.get('xmin')):
+                        last_line,actual = actual,last_line
+                        attrs['xmin'] = str(float(actual.get('xmin')))
+                    else:
+                        attrs['xmax'] = str(float(actual.get('xmax')))
                     for _w in actual.find_all('word'):
                         last_line.append(_w)
-                    attrs = last_line.attrs
-                    attrs['xmax'] = str(float(actual.get('xmax')))
                     last_line.attrs = attrs
                     attrs_parent = last_line.parent.attrs
                     attrs_parent['xmax'] = max([_.get('xmax') for _ in last_line.parent.find_all('line')])
@@ -355,7 +359,6 @@ def found_sections_with_more_then_one_line(sections, soup_pdf, toExcludeSummariz
         page_id.append(sec[0])
         sections_lines.append(number)
         _type.append(sec[3])
-
     parents = [
         (sec.parent,h,pg,_t) 
         for sec,h,pg,_t in zip(sections_without_summarization,page_heights,page_id,_type)
@@ -376,4 +379,10 @@ def found_sections_with_more_then_one_line(sections, soup_pdf, toExcludeSummariz
         else:
             coords_parents.append((coord,'anexo'))
     (coords_parents, sections_founded),(coords_parents_anexo,sections_founded_anexo) = coords_to_section(soup_pdf,coords_parents)
+    for _i in range(len(sections_founded)):
+        sections_founded[_i].append(sections_lines[_i])
+        sections_founded[_i] = sorted(list(set(sections_founded[_i])))
+    for _i in range(len(sections_founded_anexo)):
+        sections_founded_anexo[_i].append(sections_lines[_i+len(sections_founded)])
+        sections_founded_anexo[_i] = sorted(list(set(sections_founded_anexo[_i])))
     return (coords_parents, sections_founded),(coords_parents_anexo,sections_founded_anexo)

@@ -2,10 +2,9 @@ import re
 import statistics
 from utils import _remountLine
 
-EXP_GERAL = re.compile(r'((^)\s?(((SE[CÇ][ÃA]O)|(CAP[IÍ]TULO))([ ]){1,5})?(([LXVI]{1,8})|(\d{1,3}))([ )—––.-]+)([0])?([ )—––.-]*)(\n){0,2}((([A-ZÀÁÃÂÄÈÉÊËÍÎÔÕÓÒÖÛÚÙÜÇ-])+([0-9() \'“”""ªº\/:.,;–$%#@!\?&\*\|·])*){4,}))')
+EXP_GERAL = re.compile(r'((^)\s?(((SE[CÇ][ÃA]O)|(CAP[IÍ]TULO)|(CL[ÁA]USULA))([ ]){1,5})?(([LXVI]{1,8})|(\d{1,3})|((D[ÉE]CIM[AO]|(VIG[ÉE]SIM[AO]))?((PRIMEIR[AO])|(SEGUND[AO])|(TERCEIR[AO])|(QUART[AO])|(QUINT[AO])|(SEXT[AO])|(S[ÉE]TIM[AO])|(OITAV[AO])|(NON[AO])|)))([ )—––.-]+)([0])?([ )—––.-]*)(\n){0,2}((([A-ZÀÁÃÂÄÈÉÊËÍÎÔÕÓÒÖÛÚÙÜÇ-])+([0-9() \'“”""ªº\/:.,;–$%#@!\?&\*\|·])*){4,}))')
 EXP_AVISO = re.compile(r'^(AVISO).{0,20}(LICITA[ÇC][ÃA]O)',flags=re.M)
 EXP_ANEXO = re.compile(r'^(ANEXO).*$',flags=re.M)
-
 def identify_sections(pdf_html):
     """
     Identifies sections and summary lines in a PDF HTML.
@@ -27,8 +26,10 @@ def identify_sections(pdf_html):
             line = _remountLine([_line])
             if EXP_GERAL.search(line[1][0]):
                 sections.append((_i,_page.get('height'),_line,'secao'))
+                # print(' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
             if EXP_ANEXO.search(line[1][0]):
                 sections.append((_i,_page.get('height'),_line,'anexo'))
+                # print(' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
             if _i <= 5:
                 if len(sections) > 1:
                     summary_punctuation.append(

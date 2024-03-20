@@ -138,6 +138,11 @@ def coords_to_section(file_html, coords_lines_section):
             width = xMax - xMin
             height = yMax - yMin
             page_height = pg_height
+            # if number == 85:
+            #     # print(f"{_line}")
+            #     print(xMin,yMin,xMax,yMax)
+            #     print(x,y,w,h)
+            #     print(xMin>=x,yMin>=y,w>=xMax,h>=yMax)
             if xMin>=x and yMin>=y and w>=xMax and h>=yMax:
                 coords_page.append((((xMin,yMin),width,height),page_height))
                 block_section.append(_line)

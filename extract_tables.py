@@ -114,7 +114,8 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
         if out_path_csv is not None:
             df = table.df
             if len(df) != 0:
-                df.to_csv(out_path_csv / Path(f'table_pg_{founded_in_page}_n_{_i}_bbox_{table._bbox}.csv'), index=False)
+                out_path_csv.mkdir(parents=True, exist_ok=True)
+                df.to_csv(out_path_csv / Path(f'pg_{founded_in_page}_n_{_i}_bbox_{table._bbox}.csv') , index=False)
         
         if pages is not None and (int(founded_in_page) > pages[1] or int(founded_in_page) < pages[0]):
             bar.update(1)
