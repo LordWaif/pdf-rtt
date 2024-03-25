@@ -26,6 +26,7 @@ def find_header(
     output.extend(header)
     return _remountLine(output)
 
+import statistics
 def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,pageMap=None,slice_window=3,reach=1):
     """
     Removes headers from a list of groups.
@@ -72,8 +73,14 @@ def removeHeader(groups,min_chain=3,n_lines=10,cross_similarities_header=False,p
 
     for key, value in similarities.items():
         lines = key.split('-')
+        media = statistics.mean(value)
         if len(lines) <= min_chain:
             continue
-        if sum(value)/len(value) > 0.9:
+        for _i,_v in enumerate(value):
+            if _v > 0.98:
+                toExclude.append(int(lines[_i]))
+                toExclude.append(int(lines[_i+1]))
+        # print(key, value, sum(value)/len(value))
+        if media > 0.85:
             toExclude.extend(list(map(int, lines)))
     return toExclude

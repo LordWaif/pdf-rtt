@@ -3,10 +3,10 @@ import subprocess
 from layout_functions import numerateLines,isPDFCollumn
 from layout_functions import merge_split_words,merge_split_lines,restore_blocks
 from PyPDF2 import PdfWriter, PdfReader
-import tempfile
+import tempfile,statistics
 
 
-def generateGroups(path, pages,indentify_collumns=False):
+def generateGroups(path, pages,indentify_collumns=False,**kwargs):
     from layout_functions import reOrder
     """
     Generate groups and soup object from a PDF file.
@@ -39,33 +39,6 @@ def generateGroups(path, pages,indentify_collumns=False):
         isCollumn , collumns = isPDFCollumn(soup)
     else:
         isCollumn = False
-    # from mark_functions import _mark_bbox
-    # coords_pages = []
-    # for _p in collumns.keys():
-    #     coords_p = []
-    #     for _l in collumns[_p]:
-    #         xMin = float(_l[2]-2)
-    #         yMin = float(_l[0])
-    #         xMax = float(_l[2]+2)
-    #         yMax = float(_l[1])
-    #         width = xMax - xMin
-    #         height = yMax - yMin
-    #         coords_p.append(
-    #             (
-    #                 (
-    #                     (xMin,yMin),
-    #                     width,height
-    #                 ),
-    #                 float(soup.find('page').get('height'))
-    #             )
-    #         )
-    #     coords_pages.append(coords_p)
-    # _mark_bbox(
-    #     path,
-    #     coords_pages,
-    #     'pdf_marked.pdf',
-    #     pages
-    # )
     if isCollumn:
         soup = reOrder(soup,collumns)
     else:
@@ -73,6 +46,33 @@ def generateGroups(path, pages,indentify_collumns=False):
     from preprocesser import save_html
     soup = merge_split_words(soup)
     soup = merge_split_lines(soup)
+    delimite_margin = kwargs.get('delimite_margin',False)
+    line_exclude_margin = []
+    if delimite_margin:
+        def find_margin(soup):
+            coords = []
+            for _p,_page in enumerate(soup.find_all('page')):
+                page_height = float(_page.get('height'))
+                coords_page = []
+                margin = [float(_l.get('xmin')) for _l in _page.find_all('line')]
+                if len(margin) == 0:
+                    continue
+                # standard_deviation = statistics.stdev(margin)
+                margin = min([statistics.mode(margin),statistics.mean(margin)])
+                coords_page.append((((margin,0),1,page_height),page_height))
+                for _l in _page.find_all('line'):
+                    if float(_l.get('xmax')) < margin:
+                        xMin = round(float(_l.get('xmin')),2)
+                        yMin = round(float(_l.get('ymin')),2)
+                        xMax = round(float(_l.get('xmax')),2)
+                        yMax = round(float(_l.get('ymax')),2)
+                        width = xMax - xMin
+                        height = yMax - yMin
+                        coords_page.append((((xMin,yMin),width,height),page_height))
+                        _l.decompose()
+                coords.append(coords_page)
+            return soup,coords
+        soup,line_exclude_margin = find_margin(soup)
     soup, page_map = numerateLines(soup)
     # from layout_functions import findBlocks
     # coords_blocks = findBlocks(soup)
@@ -82,7 +82,7 @@ def generateGroups(path, pages,indentify_collumns=False):
     # with open('pdf.html', 'w') as f:
     #     f.write(soup.prettify())
     groups = group_pages_by_size(soup.find_all('page'))
-    return groups, soup, page_map
+    return groups, soup, page_map,line_exclude_margin
 
 
 def group_pages_by_size(pages, threshold=2):

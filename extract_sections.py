@@ -2,9 +2,13 @@ import re
 import statistics
 from utils import _remountLine
 
-EXP_GERAL = re.compile(r'((^)\s?(((SE[CÇ][ÃA]O)|(CAP[IÍ]TULO)|(CL[ÁA]USULA))([ ]){1,5})?(([LXVI]{1,8})|(\d{1,3})|((D[ÉE]CIM[AO]|(VIG[ÉE]SIM[AO]))?((PRIMEIR[AO])|(SEGUND[AO])|(TERCEIR[AO])|(QUART[AO])|(QUINT[AO])|(SEXT[AO])|(S[ÉE]TIM[AO])|(OITAV[AO])|(NON[AO])|)))([ )—––.-]+)([0])?([ )—––.-]*)(\n){0,2}((([A-ZÀÁÃÂÄÈÉÊËÍÎÔÕÓÒÖÛÚÙÜÇ-])+([0-9() \'“”""ªº\/:.,;–$%#@!\?&\*\|·])*){4,}))')
+PREFIXO =r'(^)\s?(((SE[CÇ][ÃA]O)|(CAP[IÍ]TULO)|(CL[ÁA]USULA))([ ]){1,5})?(([LXVI]{1,8})|(\d{1,3})|((D[ÉE]CIM[AO]|(VIG[ÉE]SIM[AO]))?((PRIMEIR[AO])|(SEGUND[AO])|(TERCEIR[AO])|(QUART[AO])|(QUINT[AO])|(SEXT[AO])|(S[ÉE]TIM[AO])|(OITAV[AO])|(NON[AO])|)))([ )—––.-]+)([0])?([ )—––.-]*)(\n){0,2}'
+EXP_GERAL = re.compile(r'('+PREFIXO+'((([A-ZÀÁÃÂÄÈÉÊËÍÎÔÕÓÒÖÛÚÙÜÇ-])+([0-9() \'“”""ªº\/:.,;–$%#@!\?&\*\|·])*){4,}))')
 EXP_AVISO = re.compile(r'^(AVISO).{0,20}(LICITA[ÇC][ÃA]O)',flags=re.M)
-EXP_ANEXO = re.compile(r'^(ANEXO).*$',flags=re.M)
+EXP_ANEXO = re.compile(rf'((({PREFIXO})|^)(ANEXO[S]?).*)',flags=re.M)
+EXP_SUMARIO = re.compile(r'^(SUM[ÁA]RIO|INDÍCE|SÚMULA|SEÇÕES|EPÍTOME).*$',flags=re.M)
+
+
 def identify_sections(pdf_html):
     """
     Identifies sections and summary lines in a PDF HTML.
@@ -20,56 +24,77 @@ def identify_sections(pdf_html):
 
     """
     sections = []
+    summary_page = None
     summary_punctuation = []
     for _i,_page in enumerate(pdf_html.find_all('page')):
         for _line in _page.find_all('line'):
             line = _remountLine([_line])
-            if EXP_GERAL.search(line[1][0]):
-                sections.append((_i,_page.get('height'),_line,'secao'))
-                # print(' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
+            if EXP_SUMARIO.search(line[1][0]):
+                summary_page = _i
             if EXP_ANEXO.search(line[1][0]):
                 sections.append((_i,_page.get('height'),_line,'anexo'))
                 # print(' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
+            elif EXP_GERAL.search(line[1][0]):
+                sections.append((_i,_page.get('height'),_line,'secao'))
+                # print(_line.get('number'),' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
             if _i <= 5:
+                # if _i <= 1:
+                #     print(_line.get('number'),' '.join([_w.get_text() for _w in _line.find_all('word')]))
                 if len(sections) > 1:
-                    summary_punctuation.append(
-                        (
+                    isCalculated = False
+                    if len(summary_punctuation) > 0:
+                        if summary_punctuation[-1][0] == (sections[-1][2].get('number'),sections[-2][2].get('number'),_i):
+                            isCalculated = True
+                    if not isCalculated:
+                        summary_punctuation.append(
                             (
-                                sections[-1][2].get('number'),
-                                sections[-2][2].get('number')
-                            ),
-                            indentify_summary
                                 (
-                                    sections[-2],
-                                    sections[-1]
-                                )
+                                    sections[-1][2].get('number'),
+                                    sections[-2][2].get('number'),
+                                    _i
+                                ),
+                                indentify_summary
+                                    (
+                                        sections[-2],
+                                        sections[-1],
+                                        summary_page
+                                    )
+                            )
                         )
-                    )
-    punctuations = list(
+    summary_punctuation_per_page = {}
+    summary_lines = []
+    for _ in summary_punctuation:
+        if _[0][2] not in summary_punctuation_per_page:
+            summary_punctuation_per_page[_[0][2]] = [_]
+        else:
+            summary_punctuation_per_page[_[0][2]].append(_)
+    
+    for _ in summary_punctuation_per_page:
+        punctuations = list(
         map(
             lambda x: (x[0],round(x[1],2)),
             filter(lambda x: x[1]>0,
-                summary_punctuation
+                summary_punctuation_per_page[_]
                 )
             )
         )
-    # for _s in sections:
-    #     print(' '.join([_w.get_text() for _w in _s[2].find_all('word')]))
-    if len(punctuations) == 0:
-        return sections,[]
-    _moda = statistics.mode([_[1] for _ in punctuations])
-    summary_lines = []
-    if len([_p for _p in punctuations if _p[1] == _moda])/len(punctuations) > 0.5:
-        _numbera = [_[0][0] for _ in punctuations]
-        _numberl = [_[0][1] for _ in punctuations]
-        _lines_summary = _numbera + _numberl
-        _lines_summary = list(set(_lines_summary))
-        _lines_summary.sort()
-        _i,_f = _lines_summary[0],_lines_summary[-1]
-        summary_lines = [_ for _ in range(_i,_f+1)]
+        # for _s in sections:
+        #     print(' '.join([_w.get_text() for _w in _s[2].find_all('word')]))
+        if len(punctuations) < 3:
+            continue
+        _moda = statistics.mode([_[1] for _ in punctuations])
+        if len([_p for _p in punctuations if _p[1] == _moda])/len(punctuations) > 0.5:
+            _numbera = [_[0][0] for _ in punctuations]
+            _numberl = [_[0][1] for _ in punctuations]
+            _lines_summary = _numbera + _numberl
+            _lines_summary = list(set(_lines_summary))
+            _lines_summary.sort()
+            _i,_f = _lines_summary[0],_lines_summary[-1]
+            summary_lines.extend([_ for _ in range(_i,_f+1)])
+    # print([_[2].get('number') for _ in sections])
     return sections,summary_lines
 
-def indentify_summary(last_section, actual_section):
+def indentify_summary(last_section, actual_section,summary_page=None):
     """
     Calculates the punctuation for identifying if a section is a summary.
 
@@ -85,6 +110,10 @@ def indentify_summary(last_section, actual_section):
     punctuation = 0
     coordernates_actual = {'ymin': float(actual_section.get('ymin')), 'ymax': float(actual_section.get('ymax'))}
     coordernates_last = {'ymin': float(last_section.get('ymin')), 'ymax': float(last_section.get('ymax'))}
+    if _pglast == summary_page:
+        # print(' '.join([_w.get_text() for _w in actual_section.find_all('word')]))
+        # print(' '.join([_w.get_text() for _w in last_section.find_all('word')]))
+        punctuation += 1
     if _pglast < _pgactual:
         distance = (coordernates_actual['ymin'] + float(_heightlast)) - coordernates_last['ymax']
     elif _pglast == _pgactual:
@@ -93,6 +122,8 @@ def indentify_summary(last_section, actual_section):
         raise ValueError('Page order is wrong')
     sum_dist =(coordernates_actual['ymax'] - coordernates_actual['ymin']) + (coordernates_last['ymax'] - coordernates_last['ymin'])
     lenght_line = sum_dist / 2
+    if int(last_section.get('number')) == int(actual_section.get('number'))-1:
+        punctuation += 1
     if distance < lenght_line * 1.2:
         if distance < 0:
             distance = abs(distance)

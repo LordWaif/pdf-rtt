@@ -10,7 +10,7 @@ def isVertical(line):
     """
     delta_y = float(line.get('ymax')) - float(line.get('ymin'))
     delta_x = float(line.get('xmax')) - float(line.get('xmin'))
-    return  delta_y / delta_y < 0.8
+    return  delta_x / delta_y < 0.8
 
 import statistics
 def isPDFCollumn(soup_pdf):
@@ -111,7 +111,13 @@ def removeVerticalLines(soup_pdf):
     for _p,_pg in enumerate(soup_pdf.find_all('page')):
         lines = _pg.find_all('line')
         for line in lines:
+            # if _p == 0:
+            #     delta_y = float(line.get('ymax')) - float(line.get('ymin'))
+            #     delta_x = float(line.get('xmax')) - float(line.get('xmin'))
+                # print(delta_y,delta_x,0.8,delta_y/delta_x)
+                # print(' '.join([_w.get_text() for _w in line.find_all('word')]))
             if isVertical(line):
+                # print(' '.join([_w.get_text() for _w in line.find_all('word')]))
                 line.decompose()
         if _p > 3:
             break
@@ -204,6 +210,7 @@ def numerateLines(soup_pdf):
     for _i, pg in enumerate(soup_pdf.find_all('page')):
         for _j, ln in enumerate(pg.find_all('line')):
             ln['number'] = _n
+            ln['page'] = _i
             if page_map.get(_i) is None:
                 page_map[_i] = [_n]
             else:
@@ -310,7 +317,24 @@ def merge_split_lines(soup_pdf):
                 continue
             else:
                 actual = _line
-                if abs(float(actual.get('ymin')) - float(last_line.get('ymin')))<0.2 and abs(float(actual.get('ymax')) - float(last_line.get('ymax')))<0.2:
+                lenght = float(actual.get('ymax')) - float(actual.get('ymin'))
+                distanceymin = abs(float(actual.get('ymin')) - float(last_line.get('ymin')))
+                distanceymax = abs(float(actual.get('ymax')) - float(last_line.get('ymax')))
+                isInside = actual.get('ymin') > last_line.get('ymin') and actual.get('ymax') < last_line.get('ymax') or actual.get('ymin') < last_line.get('ymin') and actual.get('ymax') > last_line.get('ymax')
+                isInside = isInside or (distanceymin < 1 and distanceymax < lenght/2) or (distanceymax < 1 and distanceymin < lenght/2)
+                t = ' '.join([_w.get_text() for _w in last_line.find_all('word')])
+                if _p == 0:
+                    # print(' '.join([_w.get_text() for _w in last_line.find_all('word')]))
+                    # print(' '.join([_w.get_text() for _w in actual.find_all('word')]))
+                    # print(isInside)
+                    # print(distanceymin < 1 , distanceymax < lenght/2)
+                    # print('t',float(actual.get('ymin')) - float(actual.get('ymax')))
+                    # print('d',distanceymin,distanceymax)
+                    # print('a',actual.get('ymin') , last_line.get('ymin') , actual.get('ymax') , last_line.get('ymax'),
+                    # actual.get('ymin') > last_line.get('ymin') , actual.get('ymax') < last_line.get('ymax'))
+                    # print('s',actual.get('ymin') < last_line.get('ymin') , actual.get('ymax') > last_line.get('ymax'))
+                    ...
+                if isInside:
                     attrs = last_line.attrs
                     if float(actual.get('xmin')) < float(last_line.get('xmin')):
                         last_line,actual = actual,last_line
