@@ -2,8 +2,7 @@
 from tqdm import tqdm
 import camelot,os,time
 from pathlib import Path
-from utils import extract_rectangle_from_pdf
-from layout_functions import find_borders
+from layout_functions import find_borders,extract_rectangle_from_pdf
 import cv2
 import multiprocessing as mp
 
@@ -35,18 +34,6 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
     return_dict = manager.dict()
     
     def read_pdf(temp_pdf, page, return_dict):
-        """
-        Read tables from a PDF file.
-
-        Args:
-            temp_pdf (str): The path to the PDF file.
-            page (int): The page number to extract tables from.
-            return_dict (dict): A dictionary to store the extracted tables.
-
-        Returns:
-            None
-
-        """
         if pages is None:
             tables = camelot.read_pdf(temp_pdf, pages='all', line_scale=15, flavor='lattice')
         else:
@@ -58,17 +45,6 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
     print(f'Max patience for detect tables: {max_patience}(s)')
     
     def execute_camelot(patience):
-        """
-        Executes the Camelot PDF table extraction process.
-
-        Args:
-            patience (int): The maximum number of seconds to wait for the process to finish.
-
-        Returns:
-            list or None: A list of extracted tables if the process finishes successfully within the given patience time,
-                          otherwise returns None.
-
-        """
         p = mp.Process(target=read_pdf, args=(temp_pdf, pages, return_dict,))
         p.start()
         i = 0
@@ -89,8 +65,8 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
     
     if tables is None:
         raise Exception('Timeout na detecção de tabelas com camelot')
-    
-    print('Tables found')
+    else:
+        print('Tables found')
     os.remove(temp_pdf)
     
     if len(tables) == 0:
@@ -137,9 +113,9 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
     bar.clear()
     bar.close()
     end = time.time()
-    print(f'(Tables) Average time per page: {(end - start) / (len(really_dimensions) if pages is None else (int(pages[1]) - int(pages[0]) + 1))}')
+    print(f'(Tables) Average time: {(end - start)}')
     
-    return [v for v in coords_pages.values()]
+    return coords_pages
 
 def draw_bbox(img, start_point, end_point, ratio=1):
     """

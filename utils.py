@@ -1,129 +1,169 @@
 import bs4
 import subprocess
-from layout_functions import numerateLines,isPDFCollumn
-from layout_functions import merge_split_words,merge_split_lines,restore_blocks
+from layout_functions import merge_split_words,merge_split_lines,restore_blocks,reOrder,numerateLines,isPDFImage,isUncopyable
+from mark_functions import mapping_mark_line,_mark_bbox,mapping_mark_coord,coords_to_line
 from PyPDF2 import PdfWriter, PdfReader
-import tempfile,statistics
+import tempfile,statistics,time
+import shutil
+from extract_tables import find_tablesCamelot
 
+MARGIN_COLORS = (0.98, 0.93, 0)
+HEADER_COLOR = (1,0,0)
+FOOTER_COLOR = (1,0,0)
+TABLE = (0.447, 0.055, 0.58)
+TABLE_CONTENT = (0.447, 0.055, 0.58)
+SECTION_COLOR = (0, 0, 1)
+ANEXO_COLOR = (0, 1, 0)
+SUMMARY_COLOR = (0.5, 0.5, 1)
 
-def generateGroups(path, pages,indentify_collumns=False,**kwargs):
-    from layout_functions import reOrder
-    """
-    Generate groups and soup object from a PDF file.
-
-    ## Args:
-        path (str): The path to the PDF file.
-        pages (tuple): A tuple containing the start and end page numbers to extract. If None, all pages will be extracted.
-
-    ## Returns:
-        tuple: A tuple containing the groups, soup object, and page map.
-            - groups (list): A list of groups.
-            - soup (BeautifulSoup): The soup object generated from the PDF HTML.
-            - page_map (dict): A dictionary mapping page numbers to line numbers.
-
-    ## Raises:
-        subprocess.CalledProcessError: If the pdftotext command fails.
-
-    """
+def extract_soup_from_pdf(path, pages=None):
     if pages is not None:
-        # If the end page is -1, extract all pages from the start page to the end of the document
-        if pages[1] == -1:
-            cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0])]
-        else:
-            cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0]), '-l', str(pages[1])]
+        cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout', '-f', str(pages[0]), '-l', str(pages[1])]
     else:
         cmd = ['pdftotext', '-layout', path, '-bbox-layout', '/dev/stdout']
     pdf_html = subprocess.check_output(cmd).decode('utf-8')
     soup = bs4.BeautifulSoup(pdf_html, 'html.parser')
-    if indentify_collumns:
-        isCollumn , collumns = isPDFCollumn(soup)
-    else:
-        isCollumn = False
-    if isCollumn:
-        soup = reOrder(soup,collumns)
-    else:
-        soup = reOrder(soup)
-    from preprocesser import save_html
-    soup = merge_split_words(soup)
-    soup = merge_split_lines(soup)
-    delimite_margin = kwargs.get('delimite_margin',False)
-    line_exclude_margin = []
-    if delimite_margin:
-        def find_margin(soup):
-            coords = []
-            for _p,_page in enumerate(soup.find_all('page')):
-                page_height = float(_page.get('height'))
-                coords_page = []
-                margin = [float(_l.get('xmin')) for _l in _page.find_all('line')]
-                if len(margin) == 0:
-                    continue
-                # standard_deviation = statistics.stdev(margin)
-                margin = min([statistics.mode(margin),statistics.mean(margin)])
-                coords_page.append((((margin,0),1,page_height),page_height))
-                for _l in _page.find_all('line'):
-                    if float(_l.get('xmax')) < margin:
-                        xMin = round(float(_l.get('xmin')),2)
-                        yMin = round(float(_l.get('ymin')),2)
-                        xMax = round(float(_l.get('xmax')),2)
-                        yMax = round(float(_l.get('ymax')),2)
-                        width = xMax - xMin
-                        height = yMax - yMin
-                        coords_page.append((((xMin,yMin),width,height),page_height))
-                        _l.decompose()
-                coords.append(coords_page)
-            return soup,coords
-        soup,line_exclude_margin = find_margin(soup)
-    soup, page_map = numerateLines(soup)
-    # from layout_functions import findBlocks
-    # coords_blocks = findBlocks(soup)
-    # from mark_functions import _mark_bbox
-    # _mark_bbox(path, coords_blocks, 'pdf_marked.pdf',pages)
-    # Salvar o arquivo html
-    # with open('pdf.html', 'w') as f:
-    #     f.write(soup.prettify())
-    groups = group_pages_by_size(soup.find_all('page'))
-    return groups, soup, page_map,line_exclude_margin
+    return soup
 
+def find_margin(soup):
+    coords = {}
+    for _p,_page in enumerate(soup.find_all('page')):
+        coords[_p] = []
+        page_height = float(_page.get('height'))
+        margin = [float(_l.get('xmin')) for _l in _page.find_all('line')]
+        if len(margin) == 0:
+            continue
+        margin = min([statistics.mode(margin),statistics.mean(margin)])
+        coords[_p].append((((margin,0),1,page_height),page_height))
+        for _l in _page.find_all('line'):
+            if float(_l.get('xmax')) < margin:
+                xMin = round(float(_l.get('xmin')),2)
+                yMin = round(float(_l.get('ymin')),2)
+                xMax = round(float(_l.get('xmax')),2)
+                yMax = round(float(_l.get('ymax')),2)
+                width = xMax - xMin
+                height = yMax - yMin
+                coords[_p].append((((xMin,yMin),width,height),page_height))
+                _l.decompose()
+    return soup,coords
 
-def group_pages_by_size(pages, threshold=2):
-    '''Group pages by size.
+def remountLine(line):
+    content = ' '.join([_.text for _ in line.find_all('word')])
+    return content
 
-    Args:
-        pages (list): A list of page objects.
-        threshold (float, optional): The maximum difference allowed between page sizes to group them together. Defaults to 2.
+def save_html(file, soup):
+    with open(file, 'w') as f:
+        f.write(str(soup.prettify()))
 
-    Returns:
-        list: A list of groups, where each group is a list of page objects with similar sizes.
-    '''
-    groups = []
-    for ind,page in enumerate(pages):
-        if len(groups) == 0:
-            groups.append([page])
+def save_txt(file, soup):
+    with open(file, 'w') as f:
+        f.write('\n'.join(list(map(remountLine,soup.find_all('line')))))
+
+def process_soup(**kwargs):
+    from element_detection import removeElements
+    # ---- Variables ----
+    delimit_margin = kwargs.get('delimit_margin',False)
+    isBbox = kwargs.get('generate_bbox',False)
+    input_file = kwargs.get('input_file',None)
+
+    header = kwargs.get('header',False)
+    footer = kwargs.get('footer',False)
+    tables = kwargs.get('tables',False)
+    sections = kwargs.get('sections',False)
+
+    preprocess_soup = kwargs.get('preprocess_soup',True)
+
+    out_file_bbox = kwargs.get('out_file_bbox',None)
+    out_file_txt = kwargs.get('out_file_txt',None)
+    out_file_json = kwargs.get('out_file_json',None)
+    out_file_html = kwargs.get('out_file_html',None)
+
+    pages = kwargs.get('pages',None)
+    # -------------------
+    soup = extract_soup_from_pdf(input_file)
+    toExclude = []
+    mark_points = {}
+    if isPDFImage(soup):
+        print(f'File {input_file} is a PDF image')
+        return False,'PDFImage'
+    if isUncopyable(soup):
+        print(f'File {input_file} is uncopyable')
+        return False,'Uncopyable'
+    if isBbox:
+        if not out_file_bbox:
+            raise Exception('out_file_bbox must be defined')
         else:
-            for group in groups:
-                if abs(float(group[0].get('width')) - float(page.get('width'))) < threshold:
-                    group.append(page)
-                    break
-            else:
-                groups.append([page])
-    return groups
+            shutil.copy(input_file,out_file_bbox)
+    if preprocess_soup:
+        soup = reOrder(soup)
+        soup = merge_split_words(soup)
+        soup = merge_split_lines(soup)
+    if delimit_margin:
+        soup,line_exclude_margin = find_margin(soup)
+        toExclude.extend(line_exclude_margin)
+        if isBbox:
+            mark_points = mapping_mark_coord(soup,line_exclude_margin,mark_points,MARGIN_COLORS)
+    soup = numerateLines(soup)
+    if header:
+        print('Processing header')
+        min_sequence = kwargs.get('min_sequence_header',10)
+        elements = [page.find_all('line')[:min_sequence] for page in soup.find_all('page')]
+        start = time.time()
+        toExcludeHeader = removeElements(elements,**kwargs)
+        print(f'Time to remove header: {time.time()-start}')
+        toExclude.extend(toExcludeHeader)
+        if isBbox:
+            mark_points = mapping_mark_line(soup,toExcludeHeader,mark_points,HEADER_COLOR)
 
-def _remountLine(lines):
-    '''Remounts a line to be used in the cosine similarity function.
-    
-    Args:
-        lines (list): A list of lines containing dictionaries with 'number' and 'text' keys.
-        
-    Returns:
-        tuple: A tuple containing two lists. The first list contains the 'number' values from the input lines,
-               and the second list contains the concatenated 'text' values from the input lines.
-    '''
-    _pgN,_lines = [],[]
-    for i, line in enumerate(lines):
-        _pgN.append(int(line.get('number')))
-        content = ' '.join([_.text for _ in line.find_all('word')])
-        _lines.append(content)
-    return _pgN, _lines
+    if footer:
+        print('Processing footer')
+        min_sequence = kwargs.get('min_sequence_footer',10)
+        elements = [page.find_all('line')[-min_sequence:] for page in soup.find_all('page')]
+        start = time.time()
+        toExcludeFooter = removeElements(elements,**kwargs)
+        print(f'Time to remove header: {time.time()-start}')
+        toExclude.extend(toExcludeFooter)
+        if isBbox:
+            mark_points = mapping_mark_line(soup,toExcludeFooter,mark_points,FOOTER_COLOR)
+
+    if tables:
+        print('Processing tables')
+        coord_tables_camelot = find_tablesCamelot(input_file, soup, pages,**kwargs)
+        elements_inside_table = coords_to_line(soup,coord_tables_camelot)
+        toExclude.extend(elements_inside_table)
+        if isBbox:
+            mark_points = mapping_mark_coord(soup,coord_tables_camelot,mark_points,TABLE)
+            mark_points = mapping_mark_line(soup,elements_inside_table,mark_points,TABLE_CONTENT)
+
+    if sections:
+        print('Processing sections')
+        from extract_sections import identify_sections
+        sections,summary_lines = identify_sections(soup)
+        number_sections = [int(_[2].get('number')) for _ in sections if _[3] == 'secao']
+        number_sections = [_ for _ in number_sections if _ not in summary_lines]
+        number_anexos = [int(_[2].get('number')) for _ in sections if _[3] == 'anexo']
+        print(f'Found {len(number_sections)} sections, {len(number_anexos)} anexos and {len(summary_lines)} summary lines')
+        toExclude.extend(summary_lines)
+        toExclude.extend(number_anexos)
+        if isBbox:
+            mark_points = mapping_mark_line(soup,number_sections,mark_points,SECTION_COLOR)
+            mark_points = mapping_mark_line(soup,number_anexos,mark_points,ANEXO_COLOR)
+            mark_points = mapping_mark_line(soup,summary_lines,mark_points,SUMMARY_COLOR)
+
+    soup = restore_blocks(soup)
+    soup = exclude_lines(soup,toExclude)
+    if out_file_txt:
+        save_txt(out_file_txt,soup)
+
+    if out_file_html:
+        save_html(out_file_html,soup)
+
+    if isBbox:
+        print('Marking bbox')
+        start = time.time()
+        _mark_bbox(out_file_bbox,mark_points,out_file_bbox,pages)
+        print(f'Time to mark bbox: {time.time()-start}')
+    return True,'Sucess'
 
 def _remountLinesWithCoord(lines):
     '''Remounts a line to be used in the cosine similarity function.
@@ -146,106 +186,9 @@ def _remountLinesWithCoord(lines):
                        'ymax':float(line.get('ymax'))})
     return _pgN, _lines, _coord
 
-def merge_dicts(original_dict):
-    '''Merges the keys of a dictionary that are consecutive.
-
-    Args:
-        original_dict (dict): The dictionary to be merged.
-
-    Returns:
-        dict: The merged dictionary.
-    '''
-    keys = list(original_dict.keys())
-    i = 0
-    while i < len(keys):
-        j = 0
-        while j < len(keys):
-            if keys[i].split('-')[-1] == keys[j].split('-')[0]:
-                p2 = '-'.join(keys[j].split('-')[1:])
-                new_key = f'{keys[i]}-{p2}'
-                new_value = original_dict[keys[i]] + original_dict[keys[j]]
-                original_dict[new_key] = new_value
-                del original_dict[keys[i]]
-                del original_dict[keys[j]]
-                keys = list(original_dict.keys())
-                i = 0
-                j = 0
-            j += 1
-        i += 1
-    return original_dict
-
-def exclude_lines(pdf, toExclude):
-    """
-    Exclude lines from a PDF based on the line numbers provided.
-
-    Args:
-        pdf (PDF object): The PDF object to modify.
-        toExclude (list): A list of line numbers to exclude.
-
-    Returns:
-        PDF object: The modified PDF object with excluded lines.
-    """
-    for page in pdf.find_all('page'):
+def exclude_lines(soup_pdf, toExclude):
+    for page in soup_pdf.find_all('page'):
         for line in page.find_all('line'):
             if int(line.get('number')) in toExclude:
                 line.decompose()
-    return pdf
-
-def isUncopyable(soup_pdf):
-    """
-    Checks if the given soup_pdf is uncopyable.
-
-    Parameters:
-    soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-    bool: True if the PDF is uncopyable, False otherwise.
-    """
-    words = soup_pdf.find_all('word')
-    chars = set([word.text for word in words])
-    total = len(chars)
-    count = sum([1 for char in chars if char.find('%') != -1 or char.find('<') != -1 or char.find('&') != -1 or char.find('/') != -1])
-    return (count/total) > 0.2
-
-
-
-def extract_rectangle_from_pdf(input_pdf_path, coordinates):
-    """
-    Extracts a rectangular region from a PDF file.
-
-    Args:
-        input_pdf_path (str): The path to the input PDF file.
-        coordinates (tuple): A tuple containing the coordinates of the upper left and lower right corners of the rectangle.
-
-    Returns:
-        str: The path to the temporary file containing the extracted rectangle as a PDF.
-
-    """
-    # Create a temporary file
-    temp_file = tempfile.NamedTemporaryFile(delete=False,suffix='.pdf')
-    # Create a PDF writer object
-    writer = PdfWriter()
-
-    # Read the input PDF
-    reader = PdfReader(input_pdf_path)
-
-    # Get the number of pages in the input PDF
-    num_pages = len(reader.pages)
-
-    # Loop over all the pages
-    for page_number in range(num_pages):
-        # Get the page
-        page = reader.pages[page_number]
-        
-        # Set the crop box coordinates
-        page.cropbox.upper_left = coordinates[0]
-        page.cropbox.lower_right = coordinates[1]
-
-        # Add the page to the writer object
-        writer.add_page(page)
-
-    # Write the output PDF
-    with open(temp_file.name, 'wb') as output_pdf:
-        writer.write(output_pdf)
-
-    return temp_file.name
+    return soup_pdf

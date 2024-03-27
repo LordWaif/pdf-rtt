@@ -2,7 +2,62 @@ from reportlab.pdfgen import canvas
 from PyPDF2 import PdfReader, PdfWriter
 import io
 
-def _mark_bbox(pdf, boxers, output_pdf, pages, color=(1, 0, 0)):
+def mapping_mark_line(soup,toExclude,mark_points,color):
+    for _ln in toExclude:
+        _line = soup.find('line',number=_ln)
+        pg = int(_line.get('page'))
+        xMin = float(_line.get('xmin'))
+        yMin = float(_line.get('ymin'))
+        xMax = float(_line.get('xmax'))
+        yMax = float(_line.get('ymax'))
+        width = xMax - xMin
+        height = yMax - yMin
+        element = _line
+        while element.name != 'page':
+            element = element.parent
+        page_height = float(element.get('height'))
+        coord = (((xMin, yMin), width, height), page_height,)
+        if pg not in mark_points:
+            mark_points[pg] = [
+                {
+                    'number':_ln,
+                    'coord': coord,
+                    'color': color
+                }
+            ]
+        else:
+            mark_points[pg].append(
+                {
+                    'number':_ln,
+                    'coord': coord,
+                    'color': color
+                }
+            )
+    return mark_points
+
+def mapping_mark_coord(soup,coords,mark_points,color):
+    for _pg,coords_page in coords.items():
+        for _coord in coords_page:
+            ((x, y), width, height), page_height = _coord
+            if _pg not in mark_points:
+                mark_points[_pg] = [
+                    {
+                        'number':None,
+                        'coord': _coord,
+                        'color': color
+                    }
+                ]
+            else:
+                mark_points[_pg].append(
+                    {
+                        'number':None,
+                        'coord': _coord,
+                        'color': color
+                    }
+                )
+    return mark_points
+
+def _mark_bbox(pdf, boxers, output_pdf, pages):
     """
     Marks bounding boxes on the specified pages of a PDF document.
 
@@ -23,8 +78,9 @@ def _mark_bbox(pdf, boxers, output_pdf, pages, color=(1, 0, 0)):
 
     _c = 0
     for i, page in enumerate(pages_list):
-        if len(boxers) == 0:
+        if len(boxers) == 0 or not (_c in boxers):
             writer.add_page(page)
+            _c += 1
             continue
         if _c >= len(boxers):
             break
@@ -33,7 +89,9 @@ def _mark_bbox(pdf, boxers, output_pdf, pages, color=(1, 0, 0)):
         packet = io.BytesIO()
         can = canvas.Canvas(packet)
         for _box in box:
-            ((x, y), width, height), page_height = _box
+            coord = _box['coord']
+            color = _box['color']
+            ((x, y), width, height), page_height = coord
             y = page_height - y - height
             # Set color of the bbox
             can.setStrokeColorRGB(*color)
@@ -81,23 +139,8 @@ def find_coords(pdf_html, toExclude):
     return coords
 
 def coords_to_line(file_html, coords_tables):
-    """
-    Converts coordinates to lines based on the given HTML file and coordinates tables.
-
-    Args:
-        file_html (BeautifulSoup): The HTML file to extract coordinates from.
-        coords_tables (list): A list of coordinates tables.
-
-    Returns:
-        tuple: A tuple containing two lists - `coords` and `numbers`.
-            - `coords` (list): A list of coordinates for each page, where each page contains a list of coordinates for each table.
-            - `numbers` (list): A list of numbers corresponding to each line.
-
-    """
-    coords = []
     numbers = []
     for _p,_page in enumerate(file_html.find_all('page')):
-        coords_page = []
         tables = coords_tables[_p]
         for _t,table in enumerate(tables):
             ((x,y),w,h),_ = table
@@ -111,10 +154,8 @@ def coords_to_line(file_html, coords_tables):
                 height = yMax - yMin
                 page_height = float(_page.get('height'))
                 if xMin>=round(x,2) and yMin>=round(y,2) and round(x+w,2)>=xMax and round(y+h,2)>=yMax:
-                    coords_page.append((((xMin,yMin),width,height),page_height))
                     numbers.append(number)
-        coords.append(coords_page)
-    return coords,numbers
+    return numbers
 
 def coords_to_section(file_html, coords_lines_section):
     coords = []

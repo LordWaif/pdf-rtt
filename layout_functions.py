@@ -1,93 +1,22 @@
+from mark_functions import coords_to_section
 def isVertical(line):
-    """
-    Determines whether a line is vertical or not.
-
-    Args:
-        line (dict): A dictionary representing a line with 'xmin', 'ymin', 'xmax', and 'ymax' keys.
-
-    Returns:
-        bool: True if the line is vertical, False otherwise.
-    """
     delta_y = float(line.get('ymax')) - float(line.get('ymin'))
     delta_x = float(line.get('xmax')) - float(line.get('xmin'))
-    return  delta_x / delta_y < 0.8
-
-import statistics
-def isPDFCollumn(soup_pdf):
-    """
-    Determines if a PDF document has multiple columns.
-
-    Args:
-        soup_pdf (BeautifulSoup): The parsed HTML representation of the PDF document.
-
-    Returns:
-        tuple: A tuple containing two elements:
-            - A boolean indicating whether the document has multiple columns.
-            - A dictionary containing the separators between the columns for each page.
-
-    """
-    proportion_doc = 0
-    pages = list(soup_pdf.find_all('page'))
-    separators = {_:[] for _ in range(len(pages))}
-    for _i,_page in enumerate(pages):
-        height = int(float(_page.get('height')))
-        groups = {_:[] for _ in range(0,height,15)}
-        for _line in _page.find_all('line'):
-            y = _line.get('ymin')
-            y = int(float(y))
-            for __i,(k,v) in enumerate(groups.items()):
-                chaves = list(groups.keys())
-                if chaves[__i] <= y < chaves[__i+1]:
-                    groups[k].append(_line)
-        for k,v in groups.items():
-            groups[k] = sorted(v, key=lambda x: float(x.get('xmin')))
-            if len(groups[k]) == 0:
-                continue
-            left_side = groups[k][0]
-            right_side = groups[k][-1]
-            distantece_sep = float(right_side.get('xmin')) - float(left_side.get('xmax'))
-            if distantece_sep > 10:
-                separator = (float(left_side.get('ymin')), float(right_side.get('ymax')),int(float(left_side.get('xmax'))+distantece_sep/2))
-                separators[_i].append(separator)
-        total_parts_len = len(groups)
-        greatThen3 = sum([len(v) for k,v in groups.items() if len(v)>2])
-        proportion = greatThen3/total_parts_len
-        proportion_doc += proportion
-
-        primeira_moda = statistics.mode([separator[2] for separator in separators[_i]])
-        top_primeira_moda = min([separator[0] for separator in separators[_i] if separator[2] == primeira_moda])
-        bottom_primeira_moda = max([separator[1] for separator in separators[_i] if separator[2] == primeira_moda])
-
-        coluna1 = (top_primeira_moda,bottom_primeira_moda,primeira_moda)
-        separators[_i] = [coluna1]
-    proportion_doc = proportion_doc/len(pages)
-    return proportion_doc > 1.3,separators
+    return  delta_x / delta_y < 0.5
 
 def isPDFImage(soup_pdf):
-    """
-    Checks if the given PDF soup contains an image.
-
-    Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-        bool: True if the PDF contains an image, False otherwise.
-    """
-    from utils import _remountLine
-    if len(_remountLine(soup_pdf.find_all('line'))[1]) < 3:
+    if len(soup_pdf.find_all('line')) < 3:
         return True
     return False
 
+def isUncopyable(soup_pdf):
+    words = soup_pdf.find_all('word')
+    chars = set([word.text for word in words])
+    total = len(chars)
+    count = sum([1 for char in chars if char.find('%') != -1 or char.find('<') != -1 or char.find('&') != -1 or char.find('/') != -1])
+    return (count/total) > 0.2
+
 def find_borders(soup_pdf):
-    """
-    Finds the minimum and maximum coordinates of the borders in a PDF represented by a BeautifulSoup object.
-
-    Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-        tuple: A tuple containing the minimum and maximum coordinates of the borders in the format ((min_x, min_y), (max_x, max_y)).
-    """
     lines = soup_pdf.find_all('line')
     x_coords = []
     y_coords = []
@@ -99,28 +28,11 @@ def find_borders(soup_pdf):
     return (min(x_coords), min(y_coords)), (max(x_coords), max(y_coords))
 
 def removeVerticalLines(soup_pdf):
-    """
-    Removes vertical lines from the given PDF soup.
-
-    Args:
-        soup_pdf (BeautifulSoup): The PDF soup to process.
-
-    Returns:
-        BeautifulSoup: The modified PDF soup with vertical lines removed.
-    """
     for _p,_pg in enumerate(soup_pdf.find_all('page')):
         lines = _pg.find_all('line')
         for line in lines:
-            # if _p == 0:
-            #     delta_y = float(line.get('ymax')) - float(line.get('ymin'))
-            #     delta_x = float(line.get('xmax')) - float(line.get('xmin'))
-                # print(delta_y,delta_x,0.8,delta_y/delta_x)
-                # print(' '.join([_w.get_text() for _w in line.find_all('word')]))
             if isVertical(line):
-                # print(' '.join([_w.get_text() for _w in line.find_all('word')]))
                 line.decompose()
-        if _p > 3:
-            break
     return soup_pdf
 
 def reOrder(soup_pdf, separators=None):
@@ -167,15 +79,6 @@ def reOrder(soup_pdf, separators=None):
     return soup_pdf
 
 def restore_blocks(soup_pdf):
-    """
-    Restores blocks in the given soup_pdf by removing empty flows and updating block attributes.
-
-    Args:
-        soup_pdf (BeautifulSoup): The BeautifulSoup object representing the PDF.
-
-    Returns:
-        BeautifulSoup: The modified soup_pdf with restored blocks.
-    """
     for _flow in soup_pdf.find_all('flow'):
         childrens = _flow.find_all('line')
         if len(childrens) == 0:
@@ -193,30 +96,14 @@ def restore_blocks(soup_pdf):
         _block.attrs = attr
     return soup_pdf
 
-
 def numerateLines(soup_pdf):
-    """
-    Numerates the lines in the given soup_pdf object.
-
-    Args:
-        soup_pdf: The BeautifulSoup object representing the PDF.
-
-    Returns:
-        A tuple containing the modified soup_pdf object and a page_map dictionary.
-        The page_map dictionary maps each page number to a list of line numbers on that page.
-    """
     _n = 0
-    page_map = {}
     for _i, pg in enumerate(soup_pdf.find_all('page')):
         for _j, ln in enumerate(pg.find_all('line')):
             ln['number'] = _n
             ln['page'] = _i
-            if page_map.get(_i) is None:
-                page_map[_i] = [_n]
-            else:
-                page_map[_i].append(_n)
             _n += 1
-    return soup_pdf, page_map
+    return soup_pdf
 
 def findBlocks(soup_pdf):
     """
@@ -298,15 +185,6 @@ def merge_split_words(soup_pdf):
     return soup_pdf
 
 def merge_split_lines(soup_pdf):
-    """
-    Merges split lines in a given PDF soup.
-
-    Args:
-        soup_pdf: The BeautifulSoup object representing the PDF soup.
-
-    Returns:
-        The modified soup with merged lines.
-    """
     for _p,_page in enumerate(soup_pdf.find_all('page')):
         last_line = None
         inside_line = False
@@ -320,20 +198,26 @@ def merge_split_lines(soup_pdf):
                 lenght = float(actual.get('ymax')) - float(actual.get('ymin'))
                 distanceymin = abs(float(actual.get('ymin')) - float(last_line.get('ymin')))
                 distanceymax = abs(float(actual.get('ymax')) - float(last_line.get('ymax')))
-                isInside = actual.get('ymin') > last_line.get('ymin') and actual.get('ymax') < last_line.get('ymax') or actual.get('ymin') < last_line.get('ymin') and actual.get('ymax') > last_line.get('ymax')
-                isInside = isInside or (distanceymin < 1 and distanceymax < lenght/2) or (distanceymax < 1 and distanceymin < lenght/2)
-                t = ' '.join([_w.get_text() for _w in last_line.find_all('word')])
-                if _p == 0:
-                    # print(' '.join([_w.get_text() for _w in last_line.find_all('word')]))
-                    # print(' '.join([_w.get_text() for _w in actual.find_all('word')]))
-                    # print(isInside)
-                    # print(distanceymin < 1 , distanceymax < lenght/2)
-                    # print('t',float(actual.get('ymin')) - float(actual.get('ymax')))
-                    # print('d',distanceymin,distanceymax)
-                    # print('a',actual.get('ymin') , last_line.get('ymin') , actual.get('ymax') , last_line.get('ymax'),
-                    # actual.get('ymin') > last_line.get('ymin') , actual.get('ymax') < last_line.get('ymax'))
-                    # print('s',actual.get('ymin') < last_line.get('ymin') , actual.get('ymax') > last_line.get('ymax'))
-                    ...
+                isInside = float(actual.get('ymin')) > float(last_line.get('ymin')) and \
+                            float(actual.get('ymax')) < float(last_line.get('ymax')) or \
+                            float(actual.get('ymin')) < float(last_line.get('ymin')) and \
+                            float(actual.get('ymax')) > float(last_line.get('ymax'))
+                isInside = isInside or \
+                            (distanceymin < 1 and \
+                            distanceymax < lenght/2) or \
+                            (distanceymax < 1 and \
+                            distanceymin < lenght/2)
+                # t = ' '.join([_w.get_text() for _w in last_line.find_all('word')])
+                # if _p == 2:
+                #     print(
+                #             actual.get('ymin') < last_line.get('ymin'),actual.get('ymax') > last_line.get('ymax'),'\n',
+                #             actual.attrs,'\n',
+                #             ' '.join([_w.get_text() for _w in actual.find_all('word')]),'\n'
+                #         ,
+                        
+                #             last_line.attrs,'\n',
+                #             ' '.join([_w.get_text() for _w in last_line.find_all('word')]),'\n'
+                #     )
                 if isInside:
                     attrs = last_line.attrs
                     if float(actual.get('xmin')) < float(last_line.get('xmin')):
@@ -347,13 +231,25 @@ def merge_split_lines(soup_pdf):
                     attrs_parent = last_line.parent.attrs
                     attrs_parent['xmax'] = max([_.get('xmax') for _ in last_line.parent.find_all('line')])
                     actual.decompose()
-                    # print(' '.join([_w.get_text() for _w in last_line.find_all('word')]))
                 else:
                     last_line = actual
     return soup_pdf
 
-
-from mark_functions import coords_to_section
+import tempfile
+from PyPDF2 import PdfWriter, PdfReader
+def extract_rectangle_from_pdf(input_pdf_path, coordinates):
+    temp_file = tempfile.NamedTemporaryFile(delete=False,suffix='.pdf')
+    writer = PdfWriter()
+    reader = PdfReader(input_pdf_path)
+    num_pages = len(reader.pages)
+    for page_number in range(num_pages):
+        page = reader.pages[page_number]
+        page.cropbox.upper_left = coordinates[0]
+        page.cropbox.lower_right = coordinates[1]
+        writer.add_page(page)
+    with open(temp_file.name, 'wb') as output_pdf:
+        writer.write(output_pdf)
+    return temp_file.name
 
 def found_sections_with_more_then_one_line(sections, soup_pdf, toExcludeSummarization):
     """

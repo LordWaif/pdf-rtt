@@ -1,6 +1,6 @@
 import re
 import statistics
-from utils import _remountLine
+from utils import remountLine
 
 PREFIXO =r'(^)\s?(((SE[CÇ][ÃA]O)|(CAP[IÍ]TULO)|(CL[ÁA]USULA))([ ]){1,5})?(([LXVI]{1,8})|(\d{1,3})|((D[ÉE]CIM[AO]|(VIG[ÉE]SIM[AO]))?((PRIMEIR[AO])|(SEGUND[AO])|(TERCEIR[AO])|(QUART[AO])|(QUINT[AO])|(SEXT[AO])|(S[ÉE]TIM[AO])|(OITAV[AO])|(NON[AO])|)))([ )—––.-]+)([0])?([ )—––.-]*)(\n){0,2}'
 EXP_GERAL = re.compile(r'('+PREFIXO+'((([A-ZÀÁÃÂÄÈÉÊËÍÎÔÕÓÒÖÛÚÙÜÇ-])+([0-9() \'“”""ªº\/:.,;–$%#@!\?&\*\|·])*){4,}))')
@@ -28,13 +28,13 @@ def identify_sections(pdf_html):
     summary_punctuation = []
     for _i,_page in enumerate(pdf_html.find_all('page')):
         for _line in _page.find_all('line'):
-            line = _remountLine([_line])
-            if EXP_SUMARIO.search(line[1][0]):
+            line = remountLine(_line)
+            if EXP_SUMARIO.search(line):
                 summary_page = _i
-            if EXP_ANEXO.search(line[1][0]):
+            if EXP_ANEXO.search(line):
                 sections.append((_i,_page.get('height'),_line,'anexo'))
                 # print(' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
-            elif EXP_GERAL.search(line[1][0]):
+            elif EXP_GERAL.search(line):
                 sections.append((_i,_page.get('height'),_line,'secao'))
                 # print(_line.get('number'),' '.join([_w.get_text() for _w in sections[-1][2].find_all('word')]))
             if _i <= 5:
@@ -78,8 +78,6 @@ def identify_sections(pdf_html):
                 )
             )
         )
-        # for _s in sections:
-        #     print(' '.join([_w.get_text() for _w in _s[2].find_all('word')]))
         if len(punctuations) < 3:
             continue
         _moda = statistics.mode([_[1] for _ in punctuations])
