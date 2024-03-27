@@ -4,7 +4,7 @@ from layout_functions import merge_split_words,merge_split_lines,restore_blocks,
 from mark_functions import mapping_mark_line,_mark_bbox,mapping_mark_coord,coords_to_line
 from PyPDF2 import PdfWriter, PdfReader
 import tempfile,statistics,time
-import shutil
+import shutil,json
 from extract_tables import find_tablesCamelot
 
 MARGIN_COLORS = (0.98, 0.93, 0)
@@ -59,6 +59,41 @@ def save_txt(file, soup):
     with open(file, 'w') as f:
         f.write('\n'.join(list(map(remountLine,soup.find_all('line')))))
 
+def save_blocks(file, soup):
+    content = []
+    for block in soup.find_all('block'):
+        lines = block.find_all('line')
+        conteudo_bloco = ' '.join([_w.text for line in lines for _w in line.find_all('word')])
+        if conteudo_bloco.strip().replace(' ','') == '':
+            continue
+        content.append(conteudo_bloco)
+    with open(file, 'w') as f:
+        f.write('\n'.join(content))
+
+def find_content(soup,section_start,section_end):
+    content = []
+    title_section = section_start[2]
+    if section_end is not None:
+        next_section = section_end[2]
+        numberEnd = int(next_section.get('number'))
+    else:
+        numberEnd = int(soup.find_all('line')[-1].get('number'))
+    numberStart = int(title_section.get('number'))
+    for _n in range(numberStart+1,numberEnd):
+        content.append(remountLine(soup.find('line',number=str(_n))))
+    return {'title':remountLine(title_section),'content':'\n'.join(content)}
+
+def generate_json(soup,sections):
+    data_json = {'secoes':[],'anexos':[]}
+    for i in range(len(sections)):
+        first = sections[i]
+        second = sections[i+1] if i+1 < len(sections) else None
+        if first[3] == 'secao':
+            data_json['secoes'].append(find_content(soup,first,second))
+        elif first[3] == 'anexo':
+            data_json['anexos'].append(find_content(soup,first,second))
+    return data_json
+
 def process_soup(**kwargs):
     from element_detection import removeElements
     # ---- Variables ----
@@ -69,7 +104,7 @@ def process_soup(**kwargs):
     header = kwargs.get('header',False)
     footer = kwargs.get('footer',False)
     tables = kwargs.get('tables',False)
-    sections = kwargs.get('sections',False)
+    split_sections = kwargs.get('sections',False)
 
     preprocess_soup = kwargs.get('preprocess_soup',True)
 
@@ -77,6 +112,7 @@ def process_soup(**kwargs):
     out_file_txt = kwargs.get('out_file_txt',None)
     out_file_json = kwargs.get('out_file_json',None)
     out_file_html = kwargs.get('out_file_html',None)
+    out_file_blocks = kwargs.get('out_file_blocks',None)
 
     pages = kwargs.get('pages',None)
     # -------------------
@@ -135,13 +171,13 @@ def process_soup(**kwargs):
             mark_points = mapping_mark_coord(soup,coord_tables_camelot,mark_points,TABLE)
             mark_points = mapping_mark_line(soup,elements_inside_table,mark_points,TABLE_CONTENT)
 
-    if sections:
+    if split_sections:
         print('Processing sections')
         from extract_sections import identify_sections
         sections,summary_lines = identify_sections(soup)
-        number_sections = [int(_[2].get('number')) for _ in sections if _[3] == 'secao']
-        number_sections = [_ for _ in number_sections if _ not in summary_lines]
-        number_anexos = [int(_[2].get('number')) for _ in sections if _[3] == 'anexo']
+        number_sections_withOut_summary = [_ for _ in sections if int(_[2].get('number')) not in summary_lines]
+        number_sections = [_ for _ in number_sections_withOut_summary if int(_[2].get('number')) if _[3] == 'secao']
+        number_anexos = [_ for _ in number_sections_withOut_summary if int(_[2].get('number')) if _[3] == 'anexo']
         print(f'Found {len(number_sections)} sections, {len(number_anexos)} anexos and {len(summary_lines)} summary lines')
         toExclude.extend(summary_lines)
         toExclude.extend(number_anexos)
@@ -152,11 +188,19 @@ def process_soup(**kwargs):
 
     soup = restore_blocks(soup)
     soup = exclude_lines(soup,toExclude)
+    if split_sections and out_file_json:
+        data_json = generate_json(soup,number_sections_withOut_summary)
+        with open(out_file_json,'w') as f:
+            json.dump(data_json,f,indent=4,ensure_ascii=False)
+
     if out_file_txt:
         save_txt(out_file_txt,soup)
 
     if out_file_html:
         save_html(out_file_html,soup)
+    
+    if out_file_blocks:
+        save_blocks(out_file_blocks,soup)
 
     if isBbox:
         print('Marking bbox')

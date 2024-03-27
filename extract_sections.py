@@ -89,7 +89,6 @@ def identify_sections(pdf_html):
             _lines_summary.sort()
             _i,_f = _lines_summary[0],_lines_summary[-1]
             summary_lines.extend([_ for _ in range(_i,_f+1)])
-    # print([_[2].get('number') for _ in sections])
     return sections,summary_lines
 
 def indentify_summary(last_section, actual_section,summary_page=None):
