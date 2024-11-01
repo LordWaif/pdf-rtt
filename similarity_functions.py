@@ -1,5 +1,5 @@
 import spacy,re
-from utils import remountLine
+from line_utils import remountLine
 from typing import List, Tuple
 
 NLP = spacy.load('pt_core_news_sm')

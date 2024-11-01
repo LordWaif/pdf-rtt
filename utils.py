@@ -6,6 +6,8 @@ from PyPDF2 import PdfWriter, PdfReader
 import tempfile,statistics,time
 import shutil,json
 from extract_tables import find_tablesCamelot
+from element_detection import removeElements
+from line_utils import remountLine
 
 MARGIN_COLORS = (0.98, 0.93, 0)
 HEADER_COLOR = (1,0,0)
@@ -46,10 +48,6 @@ def find_margin(soup):
                 coords[_p].append((((xMin,yMin),width,height),page_height))
                 _l.decompose()
     return soup,coords
-
-def remountLine(line):
-    content = ' '.join([_.text for _ in line.find_all('word')])
-    return content
 
 def save_html(file, soup):
     with open(file, 'w') as f:
@@ -95,7 +93,6 @@ def generate_json(soup,sections):
     return data_json
 
 def process_soup(**kwargs):
-    from element_detection import removeElements
     # ---- Variables ----
     delimit_margin = kwargs.get('delimit_margin',False)
     isBbox = kwargs.get('generate_bbox',False)

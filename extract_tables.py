@@ -46,6 +46,7 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
     
     def execute_camelot(patience):
         p = mp.Process(target=read_pdf, args=(temp_pdf, pages, return_dict,))
+        p.daemon = False
         p.start()
         i = 0
         while p.is_alive():
@@ -90,8 +91,7 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
         if out_path_csv is not None:
             df = table.df
             if len(df) != 0:
-                out_path_csv.mkdir(parents=True, exist_ok=True)
-                df.to_csv(out_path_csv / Path(f'pg_{founded_in_page}_n_{_i}_bbox_{table._bbox}.csv') , index=False)
+                df.to_csv(out_path_csv / Path(f'pg_{founded_in_page}_n_{_i+1}.csv') , index=False, sep=';')
         
         if pages is not None and (int(founded_in_page) > pages[1] or int(founded_in_page) < pages[0]):
             bar.update(1)

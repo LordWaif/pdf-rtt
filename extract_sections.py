@@ -1,6 +1,6 @@
 import re
 import statistics
-from utils import remountLine
+from line_utils import remountLine
 
 PREFIXO =r'(^)\s?(((SE[CÇ][ÃA]O)|(CAP[IÍ]TULO)|(CL[ÁA]USULA))([ ]){1,5})?(([LXVI]{1,8})|(\d{1,3})|((D[ÉE]CIM[AO]|(VIG[ÉE]SIM[AO]))?((PRIMEIR[AO])|(SEGUND[AO])|(TERCEIR[AO])|(QUART[AO])|(QUINT[AO])|(SEXT[AO])|(S[ÉE]TIM[AO])|(OITAV[AO])|(NON[AO])|)))([ )—––.-]+)([0])?([ )—––.-]*)(\n){0,2}'
 EXP_GERAL = re.compile(r'('+PREFIXO+'((([A-ZÀÁÃÂÄÈÉÊËÍÎÔÕÓÒÖÛÚÙÜÇ-])+([0-9() \'“”""ªº\/:.,;–$%#@!\?&\*\|·])*){4,}))')
