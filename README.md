@@ -43,5 +43,12 @@ preprocess_pdf(
     slice_window=3
 )
 ```
+### Api
+```
+uvicorn service:app --reload --port 19002 --host 0.0.0.0
+celery -A celery_app worker --pool=threads --loglevel=info -Q rtt_queue
+
+docker-compose -p rtt_services up -d
+```
 ### License
 This project is licensed under the MIT License - see the LICENSE.md file for details
