@@ -1,0 +1,7 @@
+fastapi
+celery
+uvicorn
+python-multipart
+kombu==5.0.2
+redis==5.1.1
+regex

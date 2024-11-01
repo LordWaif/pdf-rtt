@@ -9,3 +9,10 @@ pypdf2
 opencv-python
 ghostscript
 pypdf2
+fastapi
+uvicorn
+celery
+kombu==5.0.2
+redis
+python-multipart
+regex
