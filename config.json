@@ -1,0 +1,26 @@
+{
+    "extractor" : {
+        "pdf":"pdf2text",
+        "tables": "camelot"
+    },
+    "preprocess_soup": true,
+    "header": {
+        "process": true,
+        "min_sequence_header": 5
+    },
+    "footer": {
+        "process": true,
+        "min_sequence_footer": 5
+    },
+    "header-footer":{
+        "min_chain":3,
+        "reach_search": 1
+    },
+    "delimit_margin": false,
+    "output": {
+        "txt": true,
+        "csv": true,
+        "html": false,
+        "bbox" : false
+    }
+}

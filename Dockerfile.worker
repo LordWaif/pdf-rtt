@@ -1,0 +1,37 @@
+# Use uma imagem base oficial do Python
+FROM python:3.9-slim
+
+# Defina o diretório de trabalho dentro do contêiner
+WORKDIR /app
+
+# Instale as dependências do sistema necessárias
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0
+
+# Atualize o gerenciador de pacotes e instale as dependências
+RUN apt install poppler-utils build-essential libpoppler-cpp-dev pkg-config python3-dev -y
+
+# Copie o arquivo requirements.txt para o diretório de trabalho
+COPY requirements.txt .
+
+# Instale as dependências do Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Instalar ghostscript
+RUN apt install ghostscript python3-tk -y
+
+# Baixando small model do spacy
+RUN python3 -m spacy download pt
+RUN python3 -m spacy download pt_core_news_sm
+
+# Copie o restante do código da aplicação
+COPY . .
+
+# Defina a variável de ambiente para desativar o buffer de saída do Python
+ENV PYTHONUNBUFFERED=1
+
+# Comando para iniciar o worker Celery
+# celery -A service.celery worker --loglevel=info
+#celery -A celery_app worker --pool=threads --loglevel=info -Q rtt_queue
+CMD ["celery", "-A", "celery_app", "worker", "--pool=threads", "--loglevel=info", "-Q", "rtt_queue"]
