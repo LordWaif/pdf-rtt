@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  ready_to_train:
+    build: .
+    container_name: ready_to_train
+    ports:
+      - "3003:5001"
+    volumes:
+      - shared_volume:/app/shared
+
+  worker:
+    build:
+        context: .
+        dockerfile: Dockerfile.worker
+    container_name: worker
+    restart: always
+    volumes:
+      - shared_volume:/app/shared
+
+volumes:
+  shared_volume:
