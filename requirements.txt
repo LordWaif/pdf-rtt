@@ -12,5 +12,13 @@ regex==2023.8.8
 reportlab==4.2.5
 spacy==3.7.4
 tqdm==4.66.1
+pycryptodome>=3.19.1
+beautifulsoup4==4.12.3
+camelot-py==0.11.0
+reportlab
+pypdf2
+opencv-python
 ghostscript
 redis
+python-multipart
+regex
