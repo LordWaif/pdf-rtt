@@ -18,7 +18,12 @@ celery_app = Celery(
 # Especifica uma fila exclusiva para esta aplicação
 celery_app.conf.task_routes = {'process_file_task': {'queue': 'rtt_queue'}}
 
-@celery_app.task(name="process_file_task")
+celery_app.conf.update(
+    task_time_limit=1390,       
+    task_soft_time_limit=1360    
+)
+
+@celery_app.task(name="process_file_task",max_retries=1,soft_time_limit=1350,time_limit=1380)
 def process_file_task(filepath, config, task_id):
     config_process = {
         "input_file": filepath,

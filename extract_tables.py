@@ -40,20 +40,20 @@ def find_tablesCamelot(file, file_html, pages, **kwargs):
             tables = camelot.read_pdf(temp_pdf, pages=f'{page}-{page}', line_scale=15, flavor='lattice')
         return_dict['tables'] = tables
     
-    patience_constant = 2.5
-    max_patience = int(pages[-1] * patience_constant if pages is not None else len(file_html.find_all('page')) * patience_constant) + 60
+    patience_constant = 4.5
+    max_patience = min(int(pages[-1] * patience_constant if pages is not None else len(file_html.find_all('page')) * patience_constant) + 60,1200)
     print(f'Max patience for detect tables: {max_patience}(s)')
     
     def execute_camelot(patience):
         p = mp.Process(target=read_pdf, args=(temp_pdf, pages, return_dict,))
         p.daemon = False
         p.start()
-        i = 0
+        start = time.time()
         while p.is_alive():
             p.join(1)
-            i += 1
+            elapsed = time.time() - start
             if p.is_alive():
-                if i > patience:
+                if elapsed > patience:
                     p.terminate()
                     p.join()
                     return None

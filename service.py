@@ -1,7 +1,7 @@
 import uuid
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, BackgroundTasks
+from fastapi import FastAPI, UploadFile, BackgroundTasks, File
 from celery.result import AsyncResult
 from celery_app import celery_app
 import json
@@ -28,12 +28,15 @@ def cleanup_old_files(path, retention_days):
 
 @app.post("/api/v1/document/")
 async def process_document(
-        file: UploadFile, 
-        config: UploadFile, 
-        background_tasks: BackgroundTasks
+        file: UploadFile = File(...), 
+        config: UploadFile = File(...), 
+        background_tasks: BackgroundTasks = BackgroundTasks()
     ):
+    print("Received file:", file.filename)
     # Limpeza de arquivos antigos
     background_tasks.add_task(cleanup_old_files, SAVE_PATH, FILE_RETENTION_DAYS)
+    # Limpar /tmp
+    background_tasks.add_task(cleanup_old_files, "/tmp", FILE_RETENTION_DAYS)
 
     # Gera um UUID para identificar o trabalho
     task_id = str(uuid.uuid4())
@@ -140,7 +143,7 @@ async def get_csv(task_id: str):
                 number = match.group(2)
                 route = f"/api/v1/csv/{task_id}/{page}/{number}"
                 routes.append(route)
-        routes = sorted(routes)
+        routes = sorted(routes, key=lambda x: (int(x.split('/')[-2]), int(x.split('/')[-1])))
         return routes
     else:
         return JSONResponse(content={"status": "Arquivo não encontrado", "task_id": task_id}, status_code=404)

@@ -5,12 +5,18 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # Instale as dependências do sistema necessárias
-RUN apt-get update && apt-get install -y \
+# Instale as dependências do sistema necessárias e limpe o cache do apt
+RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
-    libglib2.0-0
-
-# Atualize o gerenciador de pacotes e instale as dependências
-RUN apt install poppler-utils build-essential libpoppler-cpp-dev pkg-config python3-dev -y
+    libglib2.0-0 \
+    poppler-utils \
+    build-essential \
+    libpoppler-cpp-dev \
+    pkg-config \
+    python3-dev \
+    ghostscript \
+    python3-tk && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copie o arquivo requirements.txt para o diretório de trabalho
 COPY requirements.txt .
@@ -18,12 +24,9 @@ COPY requirements.txt .
 # Instale as dependências do Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Instalar ghostscript
-RUN apt install ghostscript python3-tk -y
-
 # Baixando small model do spacy
-RUN python3 -m spacy download pt
-RUN python3 -m spacy download pt_core_news_sm
+RUN python3 -m spacy download pt && \
+    python3 -m spacy download pt_core_news_sm
 
 # Copie o restante do código da aplicação
 COPY . .
